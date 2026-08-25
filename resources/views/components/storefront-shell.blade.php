@@ -33,11 +33,18 @@
                     Torres <span class="text-indigo-600">Shop</span>
                 </a>
 
-                <!-- Desktop nav -->
-                <nav class="hidden items-center gap-6 lg:flex">
+                <!-- Desktop nav — every item is a pill with a hover background so it
+                     reads as clickable, not just colored text (Registrarse stays a
+                     solid button since it's the primary action of the group). -->
+                <nav class="hidden items-center gap-1 lg:flex">
                     @if ($featuredCategories->isNotEmpty())
                         <div x-data="{ open: false }" @click.outside="open = false" class="relative">
-                            <button type="button" @click="open = ! open" class="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900">
+                            <button
+                                type="button"
+                                @click="open = ! open"
+                                :class="open ? 'bg-gray-100 text-gray-900' : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'"
+                                class="flex items-center gap-1 rounded-full px-3 py-2 text-sm font-medium transition"
+                            >
                                 {{ __('Categorías') }}
                                 <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                             </button>
@@ -50,17 +57,17 @@
                             </div>
                         </div>
                     @endif
-                    <a href="{{ route('shop') }}" wire:navigate class="text-sm font-medium text-gray-700 hover:text-gray-900">{{ __('Tienda') }}</a>
+                    <a href="{{ route('shop') }}" wire:navigate class="rounded-full px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900">{{ __('Tienda') }}</a>
                     <livewire:cart-count />
 
                     @auth
                         @if (auth()->user()->hasRole('admin') || auth()->user()->getAllPermissions()->isNotEmpty())
-                            <a href="{{ route('admin.dashboard') }}" wire:navigate class="text-sm font-medium text-gray-700 hover:text-gray-900">{{ __('Admin') }}</a>
+                            <a href="{{ route('admin.dashboard') }}" wire:navigate class="rounded-full px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900">{{ __('Admin') }}</a>
                         @endif
-                        <a href="{{ route('dashboard') }}" wire:navigate class="text-sm font-medium text-gray-700 hover:text-gray-900">{{ auth()->user()->name }}</a>
+                        <a href="{{ route('dashboard') }}" wire:navigate class="rounded-full px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900">{{ auth()->user()->name }}</a>
                     @else
-                        <a href="{{ route('login') }}" wire:navigate class="text-sm font-medium text-gray-700 hover:text-gray-900">{{ __('Iniciar sesión') }}</a>
-                        <a href="{{ route('register') }}" wire:navigate class="rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">{{ __('Registrarse') }}</a>
+                        <a href="{{ route('login') }}" wire:navigate class="rounded-full px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900">{{ __('Iniciar sesión') }}</a>
+                        <a href="{{ route('register') }}" wire:navigate class="ml-1 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700">{{ __('Registrarse') }}</a>
                     @endauth
                 </nav>
 
@@ -70,7 +77,7 @@
                     <button
                         type="button"
                         @click="mobileOpen = true"
-                        class="text-gray-700"
+                        class="rounded-full p-2 text-gray-700 transition hover:bg-gray-100"
                         aria-label="{{ __('Abrir menú') }}"
                         aria-expanded="false"
                         :aria-expanded="mobileOpen.toString()"
@@ -100,7 +107,7 @@
                     <a href="{{ route('home') }}" wire:navigate @click="mobileOpen = false" class="text-lg font-bold tracking-tight text-gray-900">
                         Torres <span class="text-indigo-600">Shop</span>
                     </a>
-                    <button type="button" @click="mobileOpen = false" class="text-gray-700" aria-label="{{ __('Cerrar menú') }}">
+                    <button type="button" @click="mobileOpen = false" class="rounded-full p-2 text-gray-700 transition hover:bg-gray-100" aria-label="{{ __('Cerrar menú') }}">
                         <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
