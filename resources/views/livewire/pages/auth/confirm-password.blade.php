@@ -22,8 +22,10 @@ new #[Layout('layouts.guest')] class extends Component
             'email' => Auth::user()->email,
             'password' => $this->password,
         ])) {
+            // Hardcoded Spanish, not __('auth.password') — see
+            // LoginForm::authenticate() for why.
             throw ValidationException::withMessages([
-                'password' => __('auth.password'),
+                'password' => 'La contraseña ingresada es incorrecta.',
             ]);
         }
 
@@ -34,14 +36,16 @@ new #[Layout('layouts.guest')] class extends Component
 }; ?>
 
 <div>
+    <h1 class="mb-6 text-xl font-bold text-gray-900">Confirma tu contraseña</h1>
+
     <div class="mb-4 text-sm text-gray-600">
-        {{ __('This is a secure area of the application. Please confirm your password before continuing.') }}
+        Esta es un área segura de la aplicación. Por favor confirma tu contraseña antes de continuar.
     </div>
 
     <form wire:submit="confirmPassword">
         <!-- Password -->
         <div>
-            <x-input-label for="password" :value="__('Password')" />
+            <x-input-label for="password" value="Contraseña" />
 
             <x-text-input wire:model="password"
                           id="password"
@@ -55,7 +59,7 @@ new #[Layout('layouts.guest')] class extends Component
 
         <div class="flex justify-end mt-4">
             <x-primary-button>
-                {{ __('Confirm') }}
+                Confirmar
             </x-primary-button>
         </div>
     </form>

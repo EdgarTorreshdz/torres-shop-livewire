@@ -40,4 +40,15 @@ class RegistrationTest extends TestCase
         $this->assertAuthenticated();
         $this->assertTrue(auth()->user()->hasRole('customer'));
     }
+
+    /**
+     * /register existed as a route all along but nothing in the storefront
+     * ever linked to it — a logged-out visitor had no way to find it short
+     * of typing the URL. storefront-shell now links it from both the
+     * desktop header and the mobile menu.
+     */
+    public function test_the_storefront_header_links_to_registration_when_logged_out(): void
+    {
+        $this->get('/')->assertSee(route('register'), false);
+    }
 }

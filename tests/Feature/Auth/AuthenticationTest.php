@@ -54,6 +54,28 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
+    /**
+     * This app has no lang/ directory of its own — trans('auth.failed')
+     * used to silently resolve to the framework's built-in English
+     * fallback string on an otherwise all-Spanish page. LoginForm now
+     * throws a hardcoded Spanish message instead; this locks that in.
+     */
+    public function test_the_invalid_password_error_message_is_in_spanish(): void
+    {
+        $user = User::factory()->create();
+
+        Volt::test('pages.auth.login')
+            ->set('form.email', $user->email)
+            ->set('form.password', 'wrong-password')
+            ->call('login')
+            ->assertSee('Estas credenciales no coinciden con nuestros registros.');
+    }
+
+    public function test_the_login_page_links_to_registration(): void
+    {
+        $this->get('/login')->assertSee(route('register'), false);
+    }
+
     public function test_navigation_menu_can_be_rendered(): void
     {
         $user = User::factory()->create();

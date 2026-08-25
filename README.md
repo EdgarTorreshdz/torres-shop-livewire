@@ -261,6 +261,38 @@ lectura para admins y ve **todos** los pedidos de todos.
 - **Actualizar datos** (nombre, email, contraseña, eliminar cuenta) ya existía en `/profile` sin
   cambios — viene de Breeze tal cual, no es parte de este trabajo.
 
+## Auth: registro accesible y mensajes en español
+
+Dos problemas reales encontrados al revisar el flujo de autenticación (heredado tal cual de
+`template-laravel-monolith`/Breeze, nunca antes tocado en este proyecto):
+
+- **`/register` no tenía ningún link que llevara ahí.** La ruta existía y funcionaba, pero
+  `storefront-shell.blade.php` solo mostraba "Iniciar sesión" cuando no había sesión — un visitante
+  nuevo no tenía forma de encontrar el registro salvo escribiendo la URL a mano. La única pantalla
+  que sí enlazaba a `/register` era `resources/views/welcome.blade.php`, el scaffold de Laravel que
+  ni siquiera está enrutado (`/` apunta a `storefront.home`) — código muerto. Se agregó el link
+  "Registrarse" al header de escritorio y al menú de hamburguesa mobile
+  (`components/storefront-shell.blade.php`), y un link cruzado "¿No tienes cuenta?"/"¿Ya tienes
+  cuenta?" entre `/login` y `/register`.
+- **Los mensajes de error de auth se resolvían en inglés en una app 100% en español.**
+  `LoginForm::authenticate()` usaba `trans('auth.failed')`/`trans('auth.throttle', ...)`, y las
+  pantallas de contraseña usaban `__('auth.password')`/`__($status)` (con `$status` una constante
+  del password broker, ej. `Password::RESET_LINK_SENT`). Este proyecto nunca tuvo un directorio
+  `lang/` propio, así que esas llamadas no fallaban silenciosamente — **sí resuelven**, pero contra
+  los strings de fallback que trae Laravel 11+ dentro del propio framework
+  (`vendor/laravel/framework/.../Translation/lang/en/auth.php`), en inglés. Un intento de login con
+  contraseña incorrecta mostraba literalmente *"These credentials do not match our records."* en
+  medio de una pantalla completamente en español. Se reemplazaron esas llamadas por strings en
+  español directos — igual que cualquier otro mensaje de este proyecto, que nunca usó el sistema de
+  traducción de Laravel para nada más.
+
+De paso, las 6 pantallas de auth (`login`, `register`, `forgot-password`, `reset-password`,
+`confirm-password`, `verify-email`) se tradujeron por completo a español (venían tal cual las deja
+el scaffold de Breeze, en inglés), y `layouts/guest.blade.php` — antes el logo genérico de Laravel
+sobre una tarjeta gris de Breeze — ahora usa el wordmark "Torres Shop" (mismo estilo que el header
+de la tienda) enlazando al home, y una tarjeta `rounded-lg border border-gray-200` consistente con
+el resto del sitio en vez del `shadow-md` por defecto.
+
 ## Usuarios de prueba (seed)
 
 | Email | Password | Rol |
@@ -270,7 +302,7 @@ lectura para admins y ve **todos** los pedidos de todos.
 
 ## Tests
 
-`php artisan test` — 88 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 91 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -294,7 +326,9 @@ con sus 3 imágenes, subir las 3 imágenes de un banner genera variantes respons
 el home solo muestra los banners activos que además ya tienen alguna imagen cargada, en el orden
 esperado, `/dashboard` solo lista los pedidos del usuario logueado (nunca los de otro cliente ni
 los de un checkout de invitado, que no tiene `user_id`), y `/mis-pedidos/{order}` responde 403 al
-intentar ver el detalle de un pedido ajeno o de invitado.
+intentar ver el detalle de un pedido ajeno o de invitado, el mensaje de contraseña incorrecta en
+`/login` está en español (no el fallback en inglés del framework), y el header de la tienda enlaza
+a `/register` cuando no hay sesión iniciada.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
@@ -321,4 +355,9 @@ checkout), el pedido apareciendo de inmediato en `/dashboard` (ahora renombrado 
 el nav) y su detalle mostrando los mismos artículos/total que la pantalla de éxito del checkout,
 y — tras cerrar sesión y entrar como `admin@torresshop.com` — confirmación de que ese mismo
 pedido responde 403 real (`fetch` con `redirect: 'manual'`, no solo el estado de Livewire) al
-intentarlo ver por `/mis-pedidos/{order}`, porque el admin no es su dueño.
+intentarlo ver por `/mis-pedidos/{order}`, porque el admin no es su dueño, y el flujo de auth:
+el link "Registrarse" visible en el header (escritorio y menú mobile) cuando no hay sesión,
+registro real de una cuenta nueva de punta a punta redirigiendo a "Mis pedidos" con el rol
+`customer` ya asignado, un intento de login con contraseña incorrecta mostrando el mensaje real en
+español ("Estas credenciales no coinciden con nuestros registros.", no el fallback en inglés del
+framework), y `/forgot-password` con su texto y botón ya en español.

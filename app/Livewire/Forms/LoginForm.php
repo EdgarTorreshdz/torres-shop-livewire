@@ -33,8 +33,13 @@ class LoginForm extends Form
         if (! Auth::attempt($this->only(['email', 'password']), $this->remember)) {
             RateLimiter::hit($this->throttleKey());
 
+            // Hardcoded Spanish, not trans('auth.failed') — this app has no
+            // lang/ directory of its own (every other message in it is
+            // plain Spanish text, not a translation key), so that call was
+            // only ever resolving to the framework's built-in English
+            // fallback string, not anything this project actually owns.
             throw ValidationException::withMessages([
-                'form.email' => trans('auth.failed'),
+                'form.email' => 'Estas credenciales no coinciden con nuestros registros.',
             ]);
         }
 
@@ -55,10 +60,7 @@ class LoginForm extends Form
         $seconds = RateLimiter::availableIn($this->throttleKey());
 
         throw ValidationException::withMessages([
-            'form.email' => trans('auth.throttle', [
-                'seconds' => $seconds,
-                'minutes' => ceil($seconds / 60),
-            ]),
+            'form.email' => "Demasiados intentos. Intenta de nuevo en {$seconds} segundos.",
         ]);
     }
 

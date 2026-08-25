@@ -60,6 +60,7 @@
                         <a href="{{ route('dashboard') }}" wire:navigate class="text-sm font-medium text-gray-700 hover:text-gray-900">{{ auth()->user()->name }}</a>
                     @else
                         <a href="{{ route('login') }}" wire:navigate class="text-sm font-medium text-gray-700 hover:text-gray-900">{{ __('Iniciar sesión') }}</a>
+                        <a href="{{ route('register') }}" wire:navigate class="rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">{{ __('Registrarse') }}</a>
                     @endauth
                 </nav>
 
@@ -133,6 +134,9 @@
                         @else
                             <a href="{{ route('login') }}" wire:navigate @click="mobileOpen = false" class="block rounded-lg px-3 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">
                                 {{ __('Iniciar sesión') }}
+                            </a>
+                            <a href="{{ route('register') }}" wire:navigate @click="mobileOpen = false" class="mt-2 block rounded-lg bg-gray-900 px-3 py-3 text-center text-base font-medium text-white hover:bg-gray-700">
+                                {{ __('Registrarse') }}
                             </a>
                         @endauth
                     </div>
