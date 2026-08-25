@@ -103,6 +103,97 @@ class AdminCatalogTest extends TestCase
         $this->assertNull(Product::find($product->id));
     }
 
+    public function test_an_admin_can_set_merchandising_fields_and_the_margin_is_computed(): void
+    {
+        $this->actingAs($this->admin());
+
+        Volt::test('admin.products.form')
+            ->set('name', 'Playera Premium')
+            ->set('price', '300')
+            ->set('stock', '10')
+            ->set('sku', 'PLY-001')
+            ->set('color', 'Rojo, Azul, Negro')
+            ->set('material', 'Algodón 100%')
+            ->set('wholesale_price', '220')
+            ->set('cost', '180')
+            ->call('save')
+            ->assertRedirect(route('admin.productos'));
+
+        $product = Product::where('sku', 'PLY-001')->firstOrFail();
+        $this->assertSame('Rojo, Azul, Negro', $product->color);
+        $this->assertSame('Algodón 100%', $product->material);
+        $this->assertEquals(220, $product->wholesale_price);
+        $this->assertEquals(180, $product->cost);
+        $this->assertEquals(120, $product->margin_amount); // 300 - 180
+        $this->assertEquals(40.0, $product->margin_percent); // (300-180)/300 * 100
+    }
+
+    /**
+     * Regression test: Livewire binds a blank number input as '' — and ''
+     * !== null in PHP, so a plain 'nullable' rule does NOT skip 'numeric'
+     * for it (Laravel's nullable check is a strict is_null()). Without
+     * normalizing '' to null before validating, leaving "Precio mayoreo"
+     * or "Costo de producción" blank would incorrectly fail validation.
+     */
+    public function test_leaving_optional_pricing_fields_blank_does_not_fail_validation(): void
+    {
+        $this->actingAs($this->admin());
+
+        Volt::test('admin.products.form')
+            ->set('name', 'Producto Sin Costos')
+            ->set('price', '150')
+            ->set('stock', '5')
+            ->set('wholesale_price', '')
+            ->set('cost', '')
+            ->set('sku', '')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertRedirect(route('admin.productos'));
+
+        $product = Product::where('name', 'Producto Sin Costos')->firstOrFail();
+        $this->assertNull($product->wholesale_price);
+        $this->assertNull($product->cost);
+        $this->assertNull($product->sku);
+        $this->assertNull($product->margin_amount);
+        $this->assertNull($product->margin_percent);
+    }
+
+    public function test_sku_must_be_unique_among_products(): void
+    {
+        $this->actingAs($this->admin());
+        Product::factory()->create(['sku' => 'DUPLICADO']);
+
+        Volt::test('admin.products.form')
+            ->set('name', 'Otro Producto')
+            ->set('price', '100')
+            ->set('stock', '1')
+            ->set('sku', 'DUPLICADO')
+            ->call('save')
+            ->assertHasErrors('sku');
+    }
+
+    public function test_the_product_page_shows_color_and_material_but_never_internal_pricing(): void
+    {
+        $product = Product::factory()->create([
+            'name' => 'Producto Con Detalles',
+            'is_active' => true,
+            'color' => 'Verde Bosque',
+            'material' => 'Piel Genuina',
+            'wholesale_price' => 199.99,
+            'cost' => 150.00,
+        ]);
+
+        $response = $this->get("/producto/{$product->slug}");
+
+        $response->assertOk();
+        $response->assertSee('Verde Bosque');
+        $response->assertSee('Piel Genuina');
+        // Internal-only figures must never leak to the public product page.
+        $response->assertDontSee('199.99');
+        $response->assertDontSee('150.00');
+        $response->assertDontSee('150.0');
+    }
+
     public function test_an_admin_can_create_and_update_a_category(): void
     {
         $this->actingAs($this->admin());

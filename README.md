@@ -119,6 +119,47 @@ obtiene variantes responsivas gratis con solo llamar `ResponsiveImage::srcset($p
   eliminar permanentemente un producto/categoría desde la papelera) dejaría las 3 variantes
   huérfanas en disco para siempre, ya que la base de datos solo conoce el path del original.
 
+## Datos de mercadería del producto (SKU, color, material, precios, costo)
+
+`products` ganó cinco columnas nuevas, todas opcionales (`nullable`, un producto existente no
+necesitó que se le llenaran de inmediato):
+
+- **`sku`** — código de referencia interno, único. No es lo mismo que `slug` (que sale del nombre
+  para la URL pública) — dos productos pueden llamarse distinto pero compartir intención de SKU
+  por error, de ahí la restricción `unique`.
+- **`color`** / **`material`** — texto libre (ej. `"Rojo, Azul, Negro"`), **no** una tabla de
+  variantes. Un sistema real de variantes (stock/precio independiente por combinación color+
+  material) es una categoría de feature mucho más grande de lo que se pidió — esto es información
+  descriptiva que se muestra en la ficha del producto, con el mismo stock/precio para el producto
+  completo sin importar qué diga el color.
+- **`wholesale_price`** (precio mayoreo) y **`cost`** (costo de producción) — **nunca se muestran
+  en ninguna vista pública**, solo en `/admin/productos`. `price` (sin cambios) sigue siendo el
+  "precio menudeo" — el que ya se usaba en toda la tienda/carrito/checkout — así que no hubo que
+  tocar ningún lugar que ya dependiera de esa columna.
+- **Margen calculado** (`Product::margin_amount`/`margin_percent`, accessors) — `price - cost` y su
+  porcentaje, `null` cuando `cost` no está capturado (no `0`, para no confundir "no sé el costo"
+  con "no hay margen"). El formulario de admin muestra una vista previa en vivo del margen
+  mientras se escribe precio/costo, vía un método `#[Computed]` de Livewire.
+
+**Bug real encontrado al construir esto:** un `->unique()` normal en una columna nullable se rompe
+en SQL Server en cuanto hay más de una fila con `NULL` — a diferencia de SQLite/MySQL/Postgres (que
+tratan cada `NULL` como distinto de cualquier otro `NULL` para efectos de unicidad), SQL Server por
+defecto sí los considera duplicados entre sí. Pasó de verdad al correr la migración contra los 12
+productos ya sembrados sin SKU: `CREATE UNIQUE INDEX` falló con "duplicate key value is
+(<NULL>)". La migración ahora detecta el driver (`DB::connection()->getDriverName()`) y en sqlsrv
+crea un índice único **filtrado** (`... where sku is not null`) en vez de uno normal; en cualquier
+otro driver (incluyendo sqlite, que es lo que usan los tests) usa el `$table->unique()` de
+siempre, que ya funciona bien con múltiples `NULL`.
+
+**Otro real, mismo origen que el de las páginas de auth:** la regla `Rule::unique()` que valida el
+SKU es la primera vez que este proyecto usa esa regla en un form de admin (categorías/productos ya
+dedupicaban su `slug` con un loop manual, `uniqueSlug()`, no con `unique`), así que fue la primera
+vez que un mensaje de validación nuevo cayó en el fallback en inglés de Laravel (sin `lang/` propio
+en este proyecto — ver la sección de Auth más abajo). Se le pasó un mensaje en español directo como
+segundo argumento de `$this->validate()`. El resto de mensajes de validación del admin (los que ya
+existían antes de esto — "The price field must be at least 0.", etc.) siguen en inglés; es un
+problema real pero mucho más grande, ya separado como una tarea aparte.
+
 ## Categorías destacadas y productos seleccionados
 
 Dos listas curadas a mano desde el admin, ambas implementadas igual: una columna
@@ -302,7 +343,7 @@ el resto del sitio en vez del `shadow-md` por defecto.
 
 ## Tests
 
-`php artisan test` — 91 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 95 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -327,8 +368,13 @@ el home solo muestra los banners activos que además ya tienen alguna imagen car
 esperado, `/dashboard` solo lista los pedidos del usuario logueado (nunca los de otro cliente ni
 los de un checkout de invitado, que no tiene `user_id`), y `/mis-pedidos/{order}` responde 403 al
 intentar ver el detalle de un pedido ajeno o de invitado, el mensaje de contraseña incorrecta en
-`/login` está en español (no el fallback en inglés del framework), y el header de la tienda enlaza
-a `/register` cuando no hay sesión iniciada.
+`/login` está en español (no el fallback en inglés del framework), el header de la tienda enlaza
+a `/register` cuando no hay sesión iniciada, un admin puede capturar SKU/color/material/precio
+mayoreo/costo en un producto y el margen (`margin_amount`/`margin_percent`) se calcula
+correctamente, dejar vacíos los campos numéricos opcionales (mayoreo/costo) no truena la
+validación (`'' !== null` en PHP — ver la sección de arriba), el SKU debe ser único entre
+productos, y la ficha pública del producto muestra color/material pero nunca el precio mayoreo ni
+el costo de producción.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
@@ -360,4 +406,12 @@ el link "Registrarse" visible en el header (escritorio y menú mobile) cuando no
 registro real de una cuenta nueva de punta a punta redirigiendo a "Mis pedidos" con el rol
 `customer` ya asignado, un intento de login con contraseña incorrecta mostrando el mensaje real en
 español ("Estas credenciales no coinciden con nuestros registros.", no el fallback en inglés del
-framework), y `/forgot-password` con su texto y botón ya en español.
+framework), y `/forgot-password` con su texto y botón ya en español, y los datos de mercadería del
+producto: crear un producto real desde `/admin/productos/nuevo` con SKU/color/material/precio
+mayoreo/costo (inputs llenados vía `DataTransfer`/eventos nativos, no el tool de clicks), viendo el
+margen estimado ("$120.00 (40%)") actualizarse en vivo mientras se escribe precio/costo, guardarlo
+y verlo en el listado de admin con su SKU, la migración corriendo limpio contra SQL Server real
+(incluyendo el índice único filtrado y su rollback), un segundo producto con el mismo SKU
+rechazado con el mensaje en español ("Este SKU ya está en uso por otro producto."), y la ficha
+pública del producto mostrando "Color: Rojo, Azul, Negro" / "Material: Algodón 100%" mientras el
+HTML completo de la página (no solo el texto visible) nunca contiene el precio mayoreo ni el costo.

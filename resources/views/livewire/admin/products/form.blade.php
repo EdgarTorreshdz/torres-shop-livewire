@@ -6,6 +6,8 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Services\ResponsiveImage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
@@ -18,11 +20,16 @@ new #[Layout('layouts.app')] class extends Component
 
     public ?int $category_id = null;
     public string $name = '';
+    public ?string $sku = '';
     public string $description = '';
     public string $meta_title = '';
     public string $meta_description = '';
     public string $price = '';
+    public ?string $wholesale_price = '';
+    public ?string $cost = '';
     public string $stock = '';
+    public ?string $color = '';
+    public ?string $material = '';
     public bool $is_active = true;
 
     /** @var \Illuminate\Http\UploadedFile[] */
@@ -36,26 +43,89 @@ new #[Layout('layouts.app')] class extends Component
             $this->product = $product->load('images');
             $this->category_id = $product->category_id;
             $this->name = $product->name;
+            $this->sku = $product->sku ?? '';
             $this->description = $product->description ?? '';
             $this->meta_title = $product->meta_title ?? '';
             $this->meta_description = $product->meta_description ?? '';
             $this->price = (string) $product->price;
+            $this->wholesale_price = $product->wholesale_price !== null ? (string) $product->wholesale_price : '';
+            $this->cost = $product->cost !== null ? (string) $product->cost : '';
             $this->stock = (string) $product->stock;
+            $this->color = $product->color ?? '';
+            $this->material = $product->material ?? '';
             $this->is_active = $product->is_active;
         }
     }
 
+    /**
+     * Live margin preview as the admin types price/cost — Livewire's
+     * #[Computed] re-runs this on every render, so it always reflects the
+     * form's current (unsaved) values, not just what's already in the DB.
+     * Same "cost not entered yet" null-instead-of-zero rule as
+     * Product::marginPercent().
+     */
+    #[Computed]
+    public function marginPreview(): ?array
+    {
+        if ($this->cost === '' || $this->price === '' || ! is_numeric($this->cost) || ! is_numeric($this->price)) {
+            return null;
+        }
+
+        $price = (float) $this->price;
+        $cost = (float) $this->cost;
+
+        if ($price === 0.0) {
+            return null;
+        }
+
+        return [
+            'amount' => $price - $cost,
+            'percent' => round((($price - $cost) / $price) * 100, 1),
+        ];
+    }
+
     public function save(): void
     {
+        // Blank text/number inputs bind as '' in Livewire, never null — and
+        // '' !== null in PHP, so a bare 'nullable' rule would NOT skip
+        // 'numeric'/'unique' for these (Laravel's nullable check is a
+        // strict is_null()). Normalize before validating, not after, so
+        // "left blank" reliably means "unknown/not set" instead of a
+        // validation error on an empty optional field.
+        foreach (['sku', 'wholesale_price', 'cost', 'color', 'material'] as $field) {
+            if ($this->$field === '') {
+                $this->$field = null;
+            }
+        }
+
         $validated = $this->validate([
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'name' => ['required', 'string', 'max:255'],
+            // whereNull('deleted_at'): the validation Unique rule queries
+            // the raw table, not through Eloquent, so it doesn't get
+            // SoftDeletes' global scope for free — added explicitly so a
+            // soft-deleted product's SKU can be reused, same as slugs
+            // already behave via uniqueSlug() below.
+            'sku' => ['nullable', 'string', 'max:100', Rule::unique('products', 'sku')->ignore($this->product?->id)->whereNull('deleted_at')],
             'description' => ['nullable', 'string'],
             'meta_title' => ['nullable', 'string', 'max:255'],
             'meta_description' => ['nullable', 'string', 'max:320'],
             'price' => ['required', 'numeric', 'min:0'],
+            'wholesale_price' => ['nullable', 'numeric', 'min:0'],
+            'cost' => ['nullable', 'numeric', 'min:0'],
             'stock' => ['required', 'integer', 'min:0'],
+            'color' => ['nullable', 'string', 'max:255'],
+            'material' => ['nullable', 'string', 'max:255'],
             'is_active' => ['boolean'],
+        ], [
+            // 'unique' isn't used anywhere else in this app's admin forms
+            // (categories/products dedupe slugs via a manual uniqueSlug()
+            // loop, not this rule) — everywhere else's required/numeric/min
+            // messages already fall back to Laravel's built-in English
+            // strings the same way (no lang/ directory here, see
+            // LoginForm::authenticate() for the same situation), so this
+            // is the one new message this change actually introduces.
+            'sku.unique' => 'Este SKU ya está en uso por otro producto.',
         ]);
 
         $isNew = ! $this->product;
@@ -196,24 +266,63 @@ new #[Layout('layouts.app')] class extends Component
                     <input type="text" wire:model="name" required class="rounded @error('name') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('name') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
+                <label class="flex flex-col gap-1 text-sm text-gray-700">
+                    SKU
+                    <input type="text" wire:model="sku" placeholder="Código interno (opcional)" class="rounded @error('sku') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
+                    @error('sku') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                </label>
                 <label class="col-span-full flex flex-col gap-1 text-sm text-gray-700">
                     Descripción
                     <textarea wire:model="description" rows="3" class="rounded border-gray-300"></textarea>
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
-                    Precio
-                    <input type="number" step="0.01" wire:model="price" required class="rounded @error('price') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
+                    Color
+                    <input type="text" wire:model="color" placeholder="Ej. Rojo, Azul, Negro" class="rounded border-gray-300" />
+                    <span class="text-xs text-gray-500">Texto libre — se muestra tal cual en la ficha del producto.</span>
+                </label>
+                <label class="flex flex-col gap-1 text-sm text-gray-700">
+                    Material
+                    <input type="text" wire:model="material" placeholder="Ej. Algodón 100%" class="rounded border-gray-300" />
+                </label>
+                <label class="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" wire:model="is_active" class="rounded border-gray-300" />
+                    Activo (visible en la tienda)
+                </label>
+
+                <div class="col-span-full border-t border-gray-200 pt-4">
+                    <h3 class="text-sm font-medium uppercase tracking-wide text-gray-500">Precios, costo y stock</h3>
+                    <p class="mt-1 text-xs text-gray-500">
+                        El precio mayoreo y el costo de producción son datos internos — nunca se muestran en la tienda pública.
+                    </p>
+                </div>
+                <label class="flex flex-col gap-1 text-sm text-gray-700">
+                    Precio menudeo <span class="text-gray-400">(venta al público)</span>
+                    <input type="number" step="0.01" wire:model.live="price" required class="rounded @error('price') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('price') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                </label>
+                <label class="flex flex-col gap-1 text-sm text-gray-700">
+                    Precio mayoreo
+                    <input type="number" step="0.01" wire:model="wholesale_price" placeholder="Opcional" class="rounded @error('wholesale_price') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
+                    @error('wholesale_price') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                </label>
+                <label class="flex flex-col gap-1 text-sm text-gray-700">
+                    Costo de producción
+                    <input type="number" step="0.01" wire:model.live="cost" placeholder="Opcional" class="rounded @error('cost') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
+                    @error('cost') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Stock
                     <input type="number" wire:model="stock" required class="rounded @error('stock') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('stock') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
-                <label class="flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" wire:model="is_active" class="rounded border-gray-300" />
-                    Activo (visible en la tienda)
-                </label>
+                @if ($this->marginPreview)
+                    <div class="col-span-full flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm">
+                        <span class="text-gray-500">Margen estimado:</span>
+                        <span class="font-semibold {{ $this->marginPreview['amount'] >= 0 ? 'text-green-700' : 'text-red-600' }}">
+                            ${{ number_format($this->marginPreview['amount'], 2) }} ({{ $this->marginPreview['percent'] }}%)
+                        </span>
+                    </div>
+                @endif
 
                 <div class="col-span-full border-t border-gray-200 pt-4">
                     <h3 class="text-sm font-medium uppercase tracking-wide text-gray-500">SEO</h3>

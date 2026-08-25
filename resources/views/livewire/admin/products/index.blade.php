@@ -82,6 +82,7 @@ new #[Layout('layouts.app')] class extends Component
                         <tr class="border-b text-gray-500">
                             <th class="py-2 pr-4"></th>
                             <th class="py-2 pr-4">Nombre</th>
+                            <th class="py-2 pr-4">SKU</th>
                             <th class="py-2 pr-4">Categoría</th>
                             <th class="py-2 pr-4">Precio</th>
                             <th class="py-2 pr-4">Stock</th>
@@ -101,6 +102,7 @@ new #[Layout('layouts.app')] class extends Component
                                     @endif
                                 </td>
                                 <td class="py-2 pr-4">{{ $product->name }}</td>
+                                <td class="py-2 pr-4 text-gray-500">{{ $product->sku ?? '—' }}</td>
                                 <td class="py-2 pr-4 text-gray-500">{{ $product->category?->name ?? '—' }}</td>
                                 <td class="py-2 pr-4">${{ number_format($product->price, 2) }}</td>
                                 <td class="py-2 pr-4">{{ $product->stock }}</td>
@@ -118,7 +120,7 @@ new #[Layout('layouts.app')] class extends Component
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="8" class="py-6 text-center text-gray-500">No hay productos todavía.</td></tr>
+                            <tr><td colspan="9" class="py-6 text-center text-gray-500">No hay productos todavía.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

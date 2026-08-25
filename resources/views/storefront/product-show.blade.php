@@ -43,10 +43,30 @@
                 @endif
 
                 <h1 class="mt-1 text-3xl font-bold text-gray-900">{{ $product->name }}</h1>
+                @if ($product->sku)
+                    <p class="mt-1 text-xs text-gray-400">Código: {{ $product->sku }}</p>
+                @endif
                 <p class="mt-3 text-2xl font-semibold text-gray-900">${{ number_format($product->price, 2) }}</p>
 
                 @if ($product->description)
                     <p class="mt-4 text-gray-600">{{ $product->description }}</p>
+                @endif
+
+                @if ($product->color || $product->material)
+                    <dl class="mt-4 space-y-1 text-sm">
+                        @if ($product->color)
+                            <div class="flex gap-2">
+                                <dt class="font-medium text-gray-700">Color:</dt>
+                                <dd class="text-gray-600">{{ $product->color }}</dd>
+                            </div>
+                        @endif
+                        @if ($product->material)
+                            <div class="flex gap-2">
+                                <dt class="font-medium text-gray-700">Material:</dt>
+                                <dd class="text-gray-600">{{ $product->material }}</dd>
+                            </div>
+                        @endif
+                    </dl>
                 @endif
 
                 <div class="mt-8">
