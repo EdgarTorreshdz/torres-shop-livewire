@@ -94,6 +94,31 @@ cambiar. (Los campos de categoría empezaron como URL de texto plano al portar e
 `torres-shop`/`torres-shop-api` — donde sí quedaron así por alcance limitado — y se corrigieron
 acá para subir el archivo real, igual que ya funcionaba en productos.)
 
+### Imágenes responsivas (menos megas en el cliente)
+
+Cada imagen subida (`App\Services\ResponsiveImage`, vía [`intervention/image`](https://image.intervention.io)
++ el driver GD) genera, además del archivo original, tres copias en WebP a distintos anchos —
+480px, 768px y 1200px — guardadas junto al original con un sufijo (`foto.jpg` →
+`foto-sm.webp`/`foto-md.webp`/`foto-lg.webp`). No hay columna nueva en la base para esto: las
+rutas de las variantes se derivan del path ya guardado por convención, así que cualquier modelo
+que ya guarde un path (`ProductImage::path`, `Category::banner_image_path`/`mobile_image_path`)
+obtiene variantes responsivas gratis con solo llamar `ResponsiveImage::srcset($path)`.
+
+- **`<x-responsive-image>`** (usado en el home, la tienda, la ficha de categoría, la ficha de
+  producto y los carruseles) renderiza `<img src srcset sizes loading>` — es el **navegador**, no
+  el servidor, quien decide cuál de las variantes descargar según su viewport real y densidad de
+  píxeles. `sizes` lo define cada vista según su propio layout (una grilla de 3 columnas necesita
+  un valor distinto al de una foto a todo el ancho), y `loading="lazy"` es el default —
+  `eager` solo se usa en la imagen principal de la ficha de producto, la única realmente visible
+  sin hacer scroll.
+- `ResponsiveImage::srcset()` **verifica que la variante exista en disco** antes de incluirla —
+  nunca apunta a un archivo que no está ahí (por ejemplo, una imagen subida antes de que esta
+  clase existiera, que solo tendría el archivo original).
+- `ResponsiveImage::delete($path)` reemplaza cualquier `Storage::delete($path)` suelto en todo el
+  proyecto — sin esto, cada eliminación (reemplazar un banner, borrar una imagen de producto,
+  eliminar permanentemente un producto/categoría desde la papelera) dejaría las 3 variantes
+  huérfanas en disco para siempre, ya que la base de datos solo conoce el path del original.
+
 ## Categorías destacadas y productos seleccionados
 
 Dos listas curadas a mano desde el admin, ambas implementadas igual: una columna
@@ -182,7 +207,7 @@ seleccionados) por el scope global que agrega el trait — sin tocar una sola qu
 
 ## Tests
 
-`php artisan test` — 68 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 76 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -197,7 +222,10 @@ ficha de producto reflejan solo lo curado, crear/eliminar dispara un toast de é
 propio rol de admin, borrar un rol protegido) disparan un toast de error sin cambiar nada,
 eliminar una categoría/producto lo excluye de todas las consultas normales pero el registro sigue
 existiendo (`withTrashed()`), aparece en su papelera y se puede restaurar o eliminar
-permanentemente, y eliminar un producto permanentemente borra sus archivos de imagen del disco.
+permanentemente, eliminar un producto permanentemente borra sus archivos de imagen del disco,
+subir una imagen genera el original más las 3 variantes WebP responsivas, `srcset()` nunca
+apunta a una variante que no existe en disco, y `ResponsiveImage::delete()` limpia el original y
+sus variantes juntos.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
@@ -206,6 +234,10 @@ verificación de que un usuario con ese rol ve solo la sección permitida en el 
 al intentar entrar a una sección fuera de su permiso, el modal de confirmación propio (no el
 `confirm()` nativo) apareciendo y bloqueando la acción hasta confirmar, el toast de éxito
 apareciendo tanto tras un borrado en la misma página como tras un guardado con redirect, el borde
-rojo apareciendo en un campo con error de validación real, y el ciclo completo de borrado lógico:
+rojo apareciendo en un campo con error de validación real, el ciclo completo de borrado lógico:
 eliminar una categoría/producto (desaparece de la tienda al instante), verlo en su papelera,
-restaurarlo y confirmar que vuelve a estar disponible.
+restaurarlo y confirmar que vuelve a estar disponible, y las imágenes responsivas: subida real
+de una foto de 2400×2400px, verificación de que el navegador descarga la variante WebP de
+768px (~1KB) en vez del original (~90KB) tanto en viewport de escritorio como en uno móvil
+emulado con densidad de píxeles 2x (donde correctamente pide una variante más grande para
+compensar), y que un producto sin imagen sigue mostrando el placeholder gris sin romper nada.

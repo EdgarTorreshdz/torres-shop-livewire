@@ -3,7 +3,7 @@
 use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Category;
-use Illuminate\Support\Facades\Storage;
+use App\Services\ResponsiveImage;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -95,25 +95,23 @@ new #[Layout('layouts.app')] class extends Component
 
     /**
      * Stores whichever of bannerImage/mobileImage were actually picked on
-     * the 'public' disk under categories/{id}/, deleting the previous file
-     * first so replacing a banner doesn't leave the old one orphaned on
-     * disk. Mutates $updates by reference so the caller can fold the new
-     * paths into the same update()/create() call as the rest of the form.
+     * the 'public' disk under categories/{id}/ (plus a WebP copy at each
+     * responsive breakpoint, via ResponsiveImage — see its docblock),
+     * deleting the previous file (and its variants) first so replacing a
+     * banner doesn't leave the old ones orphaned on disk. Mutates
+     * $updates by reference so the caller can fold the new paths into the
+     * same update()/create() call as the rest of the form.
      */
     private function storeImages(array &$updates): void
     {
         if ($this->bannerImage) {
-            if ($this->category?->banner_image_path) {
-                Storage::disk('public')->delete($this->category->banner_image_path);
-            }
-            $updates['banner_image_path'] = $this->bannerImage->store("categories/{$this->category->id}", 'public');
+            ResponsiveImage::delete($this->category?->banner_image_path);
+            $updates['banner_image_path'] = ResponsiveImage::store($this->bannerImage, "categories/{$this->category->id}");
         }
 
         if ($this->mobileImage) {
-            if ($this->category?->mobile_image_path) {
-                Storage::disk('public')->delete($this->category->mobile_image_path);
-            }
-            $updates['mobile_image_path'] = $this->mobileImage->store("categories/{$this->category->id}", 'public');
+            ResponsiveImage::delete($this->category?->mobile_image_path);
+            $updates['mobile_image_path'] = ResponsiveImage::store($this->mobileImage, "categories/{$this->category->id}");
         }
     }
 

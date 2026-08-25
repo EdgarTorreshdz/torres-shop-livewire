@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ResponsiveImage;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,7 +15,7 @@ class ProductImage extends Model
 
     protected $fillable = ['product_id', 'path', 'sort_order'];
 
-    protected $appends = ['url'];
+    protected $appends = ['url', 'srcset'];
 
     protected $hidden = ['path'];
 
@@ -38,6 +39,19 @@ class ProductImage extends Model
         // http://localhost:8000/storage/products/3/8f2c1a.jpg).
         return Attribute::make(
             get: fn () => Storage::disk('public')->url($this->path),
+        );
+    }
+
+    /**
+     * "url 480w, url 768w, url 1200w" — pair with a `sizes` attribute set
+     * by whichever view renders it (that's context-dependent: a 3-column
+     * grid needs a different `sizes` than a full-bleed product photo, so
+     * it can't be baked in here).
+     */
+    protected function srcset(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => ResponsiveImage::srcset($this->path),
         );
     }
 }

@@ -39,6 +39,7 @@ new #[Layout('components.storefront-shell', ['title' => 'Tienda', 'description' 
     public function with(): array
     {
         $products = Product::query()
+            ->with('images')
             ->where('is_active', true)
             ->when($this->category, fn ($q) => $q->whereHas('category', fn ($q) => $q->where('slug', $this->category)))
             ->when($this->minPrice !== null, fn ($q) => $q->where('price', '>=', $this->minPrice))
@@ -96,7 +97,13 @@ new #[Layout('components.storefront-shell', ['title' => 'Tienda', 'description' 
             <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 @forelse ($products as $product)
                     <a href="{{ route('product.show', $product->slug) }}" wire:navigate class="block rounded-lg border border-gray-200 p-4 hover:border-gray-400">
-                        <div class="aspect-square rounded bg-gray-100"></div>
+                        <x-responsive-image
+                            :src="$product->images->first()?->url"
+                            :srcset="$product->images->first()?->srcset"
+                            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                            :alt="$product->name"
+                            class="aspect-square w-full rounded object-cover bg-gray-100"
+                        />
                         <h3 class="mt-3 font-medium text-gray-900">{{ $product->name }}</h3>
                         <p class="mt-1 font-semibold text-gray-900">${{ number_format($product->price, 2) }}</p>
                         @if ($product->stock <= 0)

@@ -4,7 +4,7 @@ use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Product;
-use Illuminate\Support\Facades\Storage;
+use App\Services\ResponsiveImage;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -103,14 +103,16 @@ new #[Layout('layouts.app')] class extends Component
      * (storage/app/public, served via the public/storage symlink), which
      * is fine for a small/medium project on a single server. Swapping to
      * S3-compatible storage later is config-only (config/filesystems.php),
-     * nothing here would need to change.
+     * nothing here would need to change. ResponsiveImage::store() also
+     * generates a WebP copy at each breakpoint width next to the original
+     * — see the class docblock for why that's not a separate DB column.
      */
     private function uploadImages(): void
     {
         $nextOrder = (int) $this->product->images()->max('sort_order') + 1;
 
         foreach ($this->newImages as $i => $file) {
-            $path = $file->store("products/{$this->product->id}", 'public');
+            $path = ResponsiveImage::store($file, "products/{$this->product->id}");
 
             $this->product->images()->create([
                 'path' => $path,
@@ -133,7 +135,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         $image = $this->product->images()->findOrFail($imageId);
         $path = $image->path;
-        Storage::disk('public')->delete($path);
+        ResponsiveImage::delete($path);
         $image->delete();
 
         ActivityLog::record(

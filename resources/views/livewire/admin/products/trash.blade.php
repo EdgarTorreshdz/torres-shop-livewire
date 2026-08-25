@@ -3,7 +3,7 @@
 use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Product;
-use Illuminate\Support\Facades\Storage;
+use App\Services\ResponsiveImage;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -28,11 +28,12 @@ new #[Layout('layouts.app')] class extends Component
     }
 
     /**
-     * Permanent — also has to clean up the actual image files on disk
-     * first: the product_images rows themselves cascade-delete at the
-     * database level once the product row is really gone, but that FK
-     * cascade never touches the filesystem, so skipping this would leave
-     * orphaned files behind forever.
+     * Permanent — also has to clean up the actual image files (originals
+     * plus every responsive variant) on disk first: the product_images
+     * rows themselves cascade-delete at the database level once the
+     * product row is really gone, but that FK cascade never touches the
+     * filesystem, so skipping this would leave orphaned files behind
+     * forever.
      */
     public function forceDelete(int $productId): void
     {
@@ -40,7 +41,7 @@ new #[Layout('layouts.app')] class extends Component
         $name = $product->name;
 
         foreach ($product->images as $image) {
-            Storage::disk('public')->delete($image->path);
+            ResponsiveImage::delete($image->path);
         }
 
         $product->forceDelete();

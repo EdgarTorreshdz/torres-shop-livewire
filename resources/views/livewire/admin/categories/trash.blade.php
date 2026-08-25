@@ -3,6 +3,7 @@
 use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Category;
+use App\Services\ResponsiveImage;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -29,12 +30,17 @@ new #[Layout('layouts.app')] class extends Component
     /**
      * Unlike the soft delete() on the main list, this is permanent — no
      * activity-log old_values snapshot to recover from afterward, just a
-     * record that it happened and with what name.
+     * record that it happened and with what name. Also cleans up the
+     * banner/mobile image files (and their responsive variants) from
+     * disk first — forceDelete() only removes the database row, so
+     * skipping this would leave them orphaned forever.
      */
     public function forceDelete(int $categoryId): void
     {
         $category = Category::onlyTrashed()->findOrFail($categoryId);
         $name = $category->name;
+        ResponsiveImage::delete($category->banner_image_path);
+        ResponsiveImage::delete($category->mobile_image_path);
         $category->forceDelete();
 
         ActivityLog::record(auth()->user(), 'category.force_deleted', "Eliminó permanentemente la categoría \"{$name}\"");

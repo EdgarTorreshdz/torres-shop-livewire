@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ResponsiveImage;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,7 +25,7 @@ class Category extends Model
         'featured_order',
     ];
 
-    protected $appends = ['banner_image_url', 'mobile_image_url'];
+    protected $appends = ['banner_image_url', 'mobile_image_url', 'banner_srcset', 'mobile_srcset'];
 
     protected $hidden = ['banner_image_path', 'mobile_image_path'];
 
@@ -49,6 +50,20 @@ class Category extends Model
     {
         return Attribute::make(
             get: fn () => $this->mobile_image_path ? Storage::disk('public')->url($this->mobile_image_path) : null,
+        );
+    }
+
+    protected function bannerSrcset(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => ResponsiveImage::srcset($this->banner_image_path),
+        );
+    }
+
+    protected function mobileSrcset(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => ResponsiveImage::srcset($this->mobile_image_path),
         );
     }
 }

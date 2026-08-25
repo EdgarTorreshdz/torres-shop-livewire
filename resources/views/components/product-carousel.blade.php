@@ -10,11 +10,13 @@
                     wire:navigate
                     class="block w-48 shrink-0 snap-start rounded-lg border border-gray-200 p-4 hover:border-gray-400"
                 >
-                    @if ($product->images->isNotEmpty())
-                        <img src="{{ $product->images->first()->url }}" alt="{{ $product->name }}" class="aspect-square w-full rounded object-cover" />
-                    @else
-                        <div class="aspect-square rounded bg-gray-100"></div>
-                    @endif
+                    <x-responsive-image
+                        :src="$product->images->first()?->url"
+                        :srcset="$product->images->first()?->srcset"
+                        sizes="192px"
+                        :alt="$product->name"
+                        class="aspect-square w-full rounded object-cover bg-gray-100"
+                    />
                     <h3 class="mt-3 truncate font-medium text-gray-900">{{ $product->name }}</h3>
                     <p class="mt-1 font-semibold text-gray-900">${{ number_format($product->price, 2) }}</p>
                 </a>
