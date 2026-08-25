@@ -20,14 +20,21 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans text-gray-900 antialiased">
-        <header class="border-b border-gray-100 bg-white">
+        @php($featuredCategories = \App\Models\Category::whereNotNull('featured_order')->orderBy('featured_order')->get())
+
+        <header
+            x-data="{ mobileOpen: false }"
+            x-effect="document.body.classList.toggle('overflow-hidden', mobileOpen)"
+            @keydown.escape.window="mobileOpen = false"
+            class="relative border-b border-gray-100 bg-white"
+        >
             <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
                 <a href="{{ route('home') }}" wire:navigate class="text-lg font-bold tracking-tight text-gray-900">
                     Torres <span class="text-indigo-600">Shop</span>
                 </a>
 
-                <nav class="flex items-center gap-6">
-                    @php($featuredCategories = \App\Models\Category::whereNotNull('featured_order')->orderBy('featured_order')->get())
+                <!-- Desktop nav -->
+                <nav class="hidden items-center gap-6 lg:flex">
                     @if ($featuredCategories->isNotEmpty())
                         <div x-data="{ open: false }" @click.outside="open = false" class="relative">
                             <button type="button" @click="open = ! open" class="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900">
@@ -54,6 +61,81 @@
                     @else
                         <a href="{{ route('login') }}" wire:navigate class="text-sm font-medium text-gray-700 hover:text-gray-900">{{ __('Iniciar sesión') }}</a>
                     @endauth
+                </nav>
+
+                <!-- Mobile controls -->
+                <div class="flex items-center gap-4 lg:hidden">
+                    <livewire:cart-count />
+                    <button
+                        type="button"
+                        @click="mobileOpen = true"
+                        class="text-gray-700"
+                        aria-label="{{ __('Abrir menú') }}"
+                        aria-expanded="false"
+                        :aria-expanded="mobileOpen.toString()"
+                    >
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mobile full-screen menu -->
+            <div
+                x-show="mobileOpen"
+                x-cloak
+                x-transition:enter="transition ease-out duration-150"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="transition ease-in duration-100"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                class="fixed inset-0 z-50 flex h-dvh w-full flex-col overflow-y-auto bg-white lg:hidden"
+                role="dialog"
+                aria-modal="true"
+            >
+                <div class="flex items-center justify-between border-b border-gray-100 px-4 py-4">
+                    <a href="{{ route('home') }}" wire:navigate @click="mobileOpen = false" class="text-lg font-bold tracking-tight text-gray-900">
+                        Torres <span class="text-indigo-600">Shop</span>
+                    </a>
+                    <button type="button" @click="mobileOpen = false" class="text-gray-700" aria-label="{{ __('Cerrar menú') }}">
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <nav class="flex flex-1 flex-col gap-1 px-4 py-6">
+                    <a href="{{ route('shop') }}" wire:navigate @click="mobileOpen = false" class="rounded-lg px-3 py-3 text-base font-medium text-gray-900 hover:bg-gray-50">
+                        {{ __('Tienda') }}
+                    </a>
+
+                    @if ($featuredCategories->isNotEmpty())
+                        <p class="px-3 pt-6 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">{{ __('Categorías') }}</p>
+                        @foreach ($featuredCategories as $category)
+                            <a href="{{ route('category.show', $category->slug) }}" wire:navigate @click="mobileOpen = false" class="rounded-lg px-3 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">
+                                {{ $category->name }}
+                            </a>
+                        @endforeach
+                    @endif
+
+                    <div class="mt-6 border-t border-gray-100 pt-6">
+                        @auth
+                            @if (auth()->user()->hasRole('admin') || auth()->user()->getAllPermissions()->isNotEmpty())
+                                <a href="{{ route('admin.dashboard') }}" wire:navigate @click="mobileOpen = false" class="block rounded-lg px-3 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">
+                                    {{ __('Admin') }}
+                                </a>
+                            @endif
+                            <a href="{{ route('dashboard') }}" wire:navigate @click="mobileOpen = false" class="block rounded-lg px-3 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">
+                                {{ auth()->user()->name }}
+                            </a>
+                        @else
+                            <a href="{{ route('login') }}" wire:navigate @click="mobileOpen = false" class="block rounded-lg px-3 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">
+                                {{ __('Iniciar sesión') }}
+                            </a>
+                        @endauth
+                    </div>
                 </nav>
             </div>
         </header>
