@@ -235,6 +235,32 @@ seleccionados) por el scope global que agrega el trait — sin tocar una sola qu
   pero sus datos (incluyendo las imágenes de producto y las líneas de pedidos ya facturados, que
   guardan su propio snapshot de nombre/precio) permanecen intactos y recuperables.
 
+## Cuenta del cliente (`/dashboard`, `/mis-pedidos/{order}`)
+
+El rol `customer` ya existía desde el seeder (se asigna solo, en `register()`, a cualquiera que
+se registre — `admin` nunca se otorga por registro abierto) y nunca necesitó permisos de Spatie:
+comprar y ver el catálogo no está gateado por `can()`, solo `/admin/*` lo está. Lo que sí faltaba
+era dónde ver sus propios pedidos — `/dashboard` era todavía el stub genérico de Breeze
+("You're logged in!"), y la única pantalla que listaba pedidos (`/admin/pedidos`) es de solo
+lectura para admins y ve **todos** los pedidos de todos.
+
+- **`/dashboard`** ahora es un componente Volt (`account.orders`) que lista los pedidos del
+  usuario logueado — `Order::where('user_id', auth()->id())`. El nombre de ruta sigue siendo
+  `dashboard` (todo el flujo de login/registro/verificación ya redirige ahí por nombre), solo
+  cambió qué renderiza.
+- **`/mis-pedidos/{order}`** (`account.order-show`) muestra el detalle de un pedido propio —
+  mismo layout que el detalle de admin (`/admin/pedidos/{order}`), pero gateado por **dueño**, no
+  por permiso: `abort_unless($order->user_id === auth()->id(), 403)`. Un pedido de invitado
+  (`user_id` nulo, el checkout no exige cuenta) o el pedido de otro cliente devuelven 403 igual —
+  ni siquiera un admin lo ve por esta ruta, para eso está la ruta de admin aparte.
+- El checkout ya guardaba `user_id => auth()->id()` desde que se construyó (nulo si es invitado),
+  así que no hizo falta tocar `storefront.checkout` — solo faltaba una pantalla que leyera ese
+  dato.
+- El link "Dashboard" del nav de cuenta (`layout/navigation.blade.php`) se renombró a
+  "Mis pedidos", en escritorio y en el menú responsive — es literalmente lo que ahora muestra.
+- **Actualizar datos** (nombre, email, contraseña, eliminar cuenta) ya existía en `/profile` sin
+  cambios — viene de Breeze tal cual, no es parte de este trabajo.
+
 ## Usuarios de prueba (seed)
 
 | Email | Password | Rol |
@@ -244,7 +270,7 @@ seleccionados) por el scope global que agrega el trait — sin tocar una sola qu
 
 ## Tests
 
-`php artisan test` — 83 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 88 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -265,8 +291,10 @@ apunta a una variante que no existe en disco, `ResponsiveImage::delete()` limpia
 sus variantes juntos, crear/editar un banner registra `old_values`/`new_values` en la bitácora,
 activar/desactivar un banner desde el listado queda registrado, borrar un banner lo elimina junto
 con sus 3 imágenes, subir las 3 imágenes de un banner genera variantes responsivas para cada una,
-y el home solo muestra los banners activos que además ya tienen alguna imagen cargada, en el
-orden esperado.
+el home solo muestra los banners activos que además ya tienen alguna imagen cargada, en el orden
+esperado, `/dashboard` solo lista los pedidos del usuario logueado (nunca los de otro cliente ni
+los de un checkout de invitado, que no tiene `user_id`), y `/mis-pedidos/{order}` responde 403 al
+intentar ver el detalle de un pedido ajeno o de invitado.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
@@ -286,5 +314,11 @@ carrusel de banners del home: creación de un banner con subida real de sus 3 im
 tablet/mobile) vía inputs de archivo simulados con `DataTransfer`, verificación de que cada
 breakpoint (`resize_window` a mobile/tablet/desktop) efectivamente carga el archivo correcto
 según el `<picture><source media="...">` correspondiente (`img.currentSrc` distinto en cada uno),
-desactivar el banner lo hace desaparecer del home de inmediato, y borrarlo vía el modal de
-confirmación real elimina también sus archivos de disco sin dejar huérfanos.
+desactivar el banner lo hace desaparecer del home de inmediato, borrarlo vía el modal de
+confirmación real elimina también sus archivos de disco sin dejar huérfanos, y la cuenta del
+cliente: login como `cliente@example.com`, compra real de principio a fin (tienda → carrito →
+checkout), el pedido apareciendo de inmediato en `/dashboard` (ahora renombrado "Mis pedidos" en
+el nav) y su detalle mostrando los mismos artículos/total que la pantalla de éxito del checkout,
+y — tras cerrar sesión y entrar como `admin@torresshop.com` — confirmación de que ese mismo
+pedido responde 403 real (`fetch` con `redirect: 'manual'`, no solo el estado de Livewire) al
+intentarlo ver por `/mis-pedidos/{order}`, porque el admin no es su dueño.

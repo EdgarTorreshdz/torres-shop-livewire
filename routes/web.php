@@ -18,9 +18,18 @@ Route::get('/checkout/exito/{order}', CheckoutSuccessController::class)->name('c
 
 // --- Authenticated account area ---
 
-Route::view('dashboard', 'dashboard')
+// The customer-facing "account home": their own order history, scoped by
+// user_id (see account/orders.blade.php). Route name stays 'dashboard' —
+// every post-login/register/verify-email redirect already targets it by
+// that name — only what it renders changed, from the generic Breeze
+// "You're logged in!" stub to something an actual customer wants.
+Volt::route('dashboard', 'account.orders')
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
+
+Volt::route('mis-pedidos/{order}', 'account.order-show')
+    ->middleware(['auth', 'verified'])
+    ->name('pedidos.show');
 
 Route::view('profile', 'profile')
     ->middleware(['auth'])
