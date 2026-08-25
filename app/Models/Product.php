@@ -25,7 +25,6 @@ class Product extends Model
         'wholesale_price',
         'cost',
         'stock',
-        'color',
         'material',
         'is_active',
         'featured_order',
@@ -53,9 +52,60 @@ class Product extends Model
         return $this->belongsTo(Category::class);
     }
 
+    /**
+     * The product's own base gallery — deliberately excludes images that
+     * belong to a specific color (product_images.product_color_id set).
+     * Without this filter, a color's photos would double up in here *and*
+     * in ProductColor::images(), since both still share the same
+     * product_id. This is what renders when no color is selected (or the
+     * product has none at all) — see ProductColor::images() for a color's
+     * own gallery.
+     */
     public function images(): HasMany
     {
-        return $this->hasMany(ProductImage::class)->orderBy('sort_order');
+        return $this->hasMany(ProductImage::class)->whereNull('product_color_id')->orderBy('sort_order');
+    }
+
+    public function colors(): HasMany
+    {
+        return $this->hasMany(ProductColor::class)->orderBy('sort_order');
+    }
+
+    /**
+     * Aggregate stock across colors when this product has any — a product
+     * with colors defined delegates availability to them entirely, the
+     * same way a real store's "in stock" depends on whether *any*
+     * size/color variant has inventory, not a separate top-level number
+     * that could disagree with its variants. Falls back to the product's
+     * own `stock` column for a colorless product, so nothing before this
+     * feature existed has to change.
+     */
+    protected function totalStock(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->colors->isNotEmpty() ? $this->colors->sum('stock') : $this->stock,
+        );
+    }
+
+    protected function isInStock(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->total_stock > 0,
+        );
+    }
+
+    /**
+     * The image shown where only one representative photo fits (the shop
+     * grid, carousels, the admin list) — the product's own gallery first,
+     * falling back to its first color's first photo for a product that
+     * only ever had color-specific images uploaded (no base gallery of
+     * its own).
+     */
+    protected function displayImage(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->images->first() ?? $this->colors->first()?->images->first(),
+        );
     }
 
     /**

@@ -28,7 +28,6 @@ new #[Layout('layouts.app')] class extends Component
     public ?string $wholesale_price = '';
     public ?string $cost = '';
     public string $stock = '';
-    public ?string $color = '';
     public ?string $material = '';
     public bool $is_active = true;
 
@@ -40,7 +39,7 @@ new #[Layout('layouts.app')] class extends Component
         abort_unless(auth()->user()->can('products.manage'), 403);
 
         if ($product?->exists) {
-            $this->product = $product->load('images');
+            $this->product = $product->load(['images', 'colors.images']);
             $this->category_id = $product->category_id;
             $this->name = $product->name;
             $this->sku = $product->sku ?? '';
@@ -51,7 +50,6 @@ new #[Layout('layouts.app')] class extends Component
             $this->wholesale_price = $product->wholesale_price !== null ? (string) $product->wholesale_price : '';
             $this->cost = $product->cost !== null ? (string) $product->cost : '';
             $this->stock = (string) $product->stock;
-            $this->color = $product->color ?? '';
             $this->material = $product->material ?? '';
             $this->is_active = $product->is_active;
         }
@@ -92,7 +90,7 @@ new #[Layout('layouts.app')] class extends Component
         // strict is_null()). Normalize before validating, not after, so
         // "left blank" reliably means "unknown/not set" instead of a
         // validation error on an empty optional field.
-        foreach (['sku', 'wholesale_price', 'cost', 'color', 'material'] as $field) {
+        foreach (['sku', 'wholesale_price', 'cost', 'material'] as $field) {
             if ($this->$field === '') {
                 $this->$field = null;
             }
@@ -114,7 +112,6 @@ new #[Layout('layouts.app')] class extends Component
             'wholesale_price' => ['nullable', 'numeric', 'min:0'],
             'cost' => ['nullable', 'numeric', 'min:0'],
             'stock' => ['required', 'integer', 'min:0'],
-            'color' => ['nullable', 'string', 'max:255'],
             'material' => ['nullable', 'string', 'max:255'],
             'is_active' => ['boolean'],
         ], [
@@ -276,13 +273,9 @@ new #[Layout('layouts.app')] class extends Component
                     <textarea wire:model="description" rows="3" class="rounded border-gray-300"></textarea>
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
-                    Color
-                    <input type="text" wire:model="color" placeholder="Ej. Rojo, Azul, Negro" class="rounded border-gray-300" />
-                    <span class="text-xs text-gray-500">Texto libre — se muestra tal cual en la ficha del producto.</span>
-                </label>
-                <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Material
                     <input type="text" wire:model="material" placeholder="Ej. Algodón 100%" class="rounded border-gray-300" />
+                    <span class="text-xs text-gray-500">Aplica al producto completo. Los colores se gestionan aparte, más abajo.</span>
                 </label>
                 <label class="flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" wire:model="is_active" class="rounded border-gray-300" />
@@ -314,6 +307,9 @@ new #[Layout('layouts.app')] class extends Component
                     Stock
                     <input type="number" wire:model="stock" required class="rounded @error('stock') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('stock') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                    @if ($product?->colors->isNotEmpty())
+                        <span class="text-xs text-amber-600">Este producto ya tiene colores — el stock real se controla por color, este valor no se usa.</span>
+                    @endif
                 </label>
                 @if ($this->marginPreview)
                     <div class="col-span-full flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm">
@@ -360,8 +356,38 @@ new #[Layout('layouts.app')] class extends Component
                         <input type="file" wire:model="newImages" multiple accept="image/*" class="rounded text-sm @error('newImages.*') ring-1 ring-red-500 @else border-gray-300 @enderror" />
                         @error('newImages.*') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                     </label>
+
+                    <div class="col-span-full border-t border-gray-200 pt-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-sm font-medium uppercase tracking-wide text-gray-500">Colores</h3>
+                            <a href="{{ route('admin.productos.colores', $product) }}" wire:navigate class="text-sm text-indigo-600 hover:underline">
+                                Gestionar colores &rarr;
+                            </a>
+                        </div>
+                        @if ($product->colors->isEmpty())
+                            <p class="mt-2 text-sm text-gray-500">Este producto todavía no tiene colores. Cada color puede tener su propia galería de fotos, precio y stock.</p>
+                        @else
+                            <div class="mt-3 flex flex-wrap gap-3">
+                                @foreach ($product->colors as $color)
+                                    <div class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                                        @if ($color->images->first())
+                                            <img src="{{ $color->images->first()->url }}" alt="" class="h-8 w-8 rounded-full object-cover" />
+                                        @elseif ($color->hex)
+                                            <span class="block h-8 w-8 rounded-full" style="background-color: {{ $color->hex }}"></span>
+                                        @else
+                                            <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-[9px] font-medium text-gray-500">{{ mb_substr($color->name, 0, 3) }}</span>
+                                        @endif
+                                        <div>
+                                            <p class="font-medium text-gray-900">{{ $color->name }}</p>
+                                            <p class="text-xs text-gray-500">${{ number_format($color->effective_price, 2) }} · {{ $color->stock }} en stock</p>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
                 @else
-                    <p class="col-span-full text-sm text-gray-500">Guarda el producto primero para poder subir imágenes.</p>
+                    <p class="col-span-full text-sm text-gray-500">Guarda el producto primero para poder subir imágenes y gestionar colores.</p>
                 @endif
 
                 <button type="submit" class="col-span-full w-fit rounded-full bg-gray-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-gray-700">

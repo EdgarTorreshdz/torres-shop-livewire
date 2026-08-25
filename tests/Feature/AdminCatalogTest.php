@@ -112,7 +112,6 @@ class AdminCatalogTest extends TestCase
             ->set('price', '300')
             ->set('stock', '10')
             ->set('sku', 'PLY-001')
-            ->set('color', 'Rojo, Azul, Negro')
             ->set('material', 'Algodón 100%')
             ->set('wholesale_price', '220')
             ->set('cost', '180')
@@ -120,7 +119,6 @@ class AdminCatalogTest extends TestCase
             ->assertRedirect(route('admin.productos'));
 
         $product = Product::where('sku', 'PLY-001')->firstOrFail();
-        $this->assertSame('Rojo, Azul, Negro', $product->color);
         $this->assertSame('Algodón 100%', $product->material);
         $this->assertEquals(220, $product->wholesale_price);
         $this->assertEquals(180, $product->cost);
@@ -172,16 +170,16 @@ class AdminCatalogTest extends TestCase
             ->assertHasErrors('sku');
     }
 
-    public function test_the_product_page_shows_color_and_material_but_never_internal_pricing(): void
+    public function test_the_product_page_shows_material_and_color_names_but_never_internal_pricing(): void
     {
         $product = Product::factory()->create([
             'name' => 'Producto Con Detalles',
             'is_active' => true,
-            'color' => 'Verde Bosque',
             'material' => 'Piel Genuina',
             'wholesale_price' => 199.99,
             'cost' => 150.00,
         ]);
+        $product->colors()->create(['name' => 'Verde Bosque', 'stock' => 5]);
 
         $response = $this->get("/producto/{$product->slug}");
 

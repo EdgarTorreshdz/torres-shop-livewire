@@ -67,7 +67,7 @@ class ShopTest extends TestCase
     public function test_checkout_computes_the_total_from_the_database_and_decrements_stock(): void
     {
         $product = Product::factory()->create(['price' => 100, 'stock' => 5, 'is_active' => true]);
-        Cart::add($product->id, 2);
+        Cart::add($product->id, null, 2);
 
         $component = Volt::test('storefront.checkout')
             ->set('customer_name', 'Cliente de Prueba')
@@ -87,7 +87,7 @@ class ShopTest extends TestCase
     public function test_checkout_fails_cleanly_when_stock_is_insufficient(): void
     {
         $product = Product::factory()->create(['price' => 100, 'stock' => 1, 'is_active' => true]);
-        Cart::add($product->id, 5);
+        Cart::add($product->id, null, 5);
 
         Volt::test('storefront.checkout')
             ->set('customer_name', 'Cliente de Prueba')

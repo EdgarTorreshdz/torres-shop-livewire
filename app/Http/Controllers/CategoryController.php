@@ -16,7 +16,7 @@ class CategoryController extends Controller
 
         return view('storefront.category-show', [
             'category' => $category,
-            'products' => $category->products()->with('images')->where('is_active', true)->orderBy('name')->paginate(9),
+            'products' => $category->products()->with(['images', 'colors.images'])->where('is_active', true)->orderBy('name')->paginate(9),
             'seoTitle' => $category->meta_title ?: $category->name,
             'seoDescription' => $category->meta_description ?: $category->description,
         ]);

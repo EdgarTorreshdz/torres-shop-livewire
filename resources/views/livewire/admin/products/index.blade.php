@@ -46,7 +46,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         return [
             'products' => Product::query()
-                ->with(['category', 'images'])
+                ->with(['category', 'images', 'colors.images'])
                 ->when($this->search, fn ($q) => $q->where('name', 'like', "%{$this->search}%"))
                 ->orderBy('name')
                 ->paginate(10),
@@ -95,17 +95,28 @@ new #[Layout('layouts.app')] class extends Component
                         @forelse ($products as $product)
                             <tr class="border-b" wire:key="product-{{ $product->id }}">
                                 <td class="py-2 pr-4">
-                                    @if ($product->images->isNotEmpty())
-                                        <img src="{{ $product->images->first()->url }}" alt="" class="h-10 w-10 rounded object-cover" />
+                                    @if ($product->display_image)
+                                        <img src="{{ $product->display_image->url }}" alt="" class="h-10 w-10 rounded object-cover" />
                                     @else
                                         <div class="h-10 w-10 rounded bg-gray-100"></div>
                                     @endif
                                 </td>
-                                <td class="py-2 pr-4">{{ $product->name }}</td>
+                                <td class="py-2 pr-4">
+                                    {{ $product->name }}
+                                    @if ($product->colors->isNotEmpty())
+                                        {{-- Not Str::plural('color', $n) — that resolves via Doctrine Inflector's
+                                             English pluralization rules regardless of app locale, and would print
+                                             "colors" (not "colores") on an otherwise all-Spanish page. Same class of
+                                             bug as LoginForm's old trans('auth.failed') — see that fix's commit for
+                                             the fuller explanation of why this app doesn't lean on Laravel's
+                                             locale-driven helpers for anything. --}}
+                                        <span class="ml-1 text-xs text-gray-400">({{ $product->colors->count() }} {{ $product->colors->count() === 1 ? 'color' : 'colores' }})</span>
+                                    @endif
+                                </td>
                                 <td class="py-2 pr-4 text-gray-500">{{ $product->sku ?? '—' }}</td>
                                 <td class="py-2 pr-4 text-gray-500">{{ $product->category?->name ?? '—' }}</td>
                                 <td class="py-2 pr-4">${{ number_format($product->price, 2) }}</td>
-                                <td class="py-2 pr-4">{{ $product->stock }}</td>
+                                <td class="py-2 pr-4">{{ $product->total_stock }}</td>
                                 <td class="py-2 pr-4">{{ $product->is_active ? 'Sí' : 'No' }}</td>
                                 <td class="py-2 pr-4 text-gray-500">{{ $product->featured_order !== null ? "#{$product->featured_order}" : '—' }}</td>
                                 <td class="py-2">

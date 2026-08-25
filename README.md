@@ -127,11 +127,9 @@ necesitó que se le llenaran de inmediato):
 - **`sku`** — código de referencia interno, único. No es lo mismo que `slug` (que sale del nombre
   para la URL pública) — dos productos pueden llamarse distinto pero compartir intención de SKU
   por error, de ahí la restricción `unique`.
-- **`color`** / **`material`** — texto libre (ej. `"Rojo, Azul, Negro"`), **no** una tabla de
-  variantes. Un sistema real de variantes (stock/precio independiente por combinación color+
-  material) es una categoría de feature mucho más grande de lo que se pidió — esto es información
-  descriptiva que se muestra en la ficha del producto, con el mismo stock/precio para el producto
-  completo sin importar qué diga el color.
+- **`material`** — texto libre (ej. `"Algodón 100%"`), aplica al producto completo. `color` empezó
+  igual (texto libre) pero se reemplazó por una tabla real de variantes — ver la sección de abajo
+  — así que esa columna ya no existe.
 - **`wholesale_price`** (precio mayoreo) y **`cost`** (costo de producción) — **nunca se muestran
   en ninguna vista pública**, solo en `/admin/productos`. `price` (sin cambios) sigue siendo el
   "precio menudeo" — el que ya se usaba en toda la tienda/carrito/checkout — así que no hubo que
@@ -159,6 +157,71 @@ en este proyecto — ver la sección de Auth más abajo). Se le pasó un mensaje
 segundo argumento de `$this->validate()`. El resto de mensajes de validación del admin (los que ya
 existían antes de esto — "The price field must be at least 0.", etc.) siguen en inglés; es un
 problema real pero mucho más grande, ya separado como una tarea aparte.
+
+## Colores de producto con imagen y precio propios (variantes estilo Nike)
+
+El campo `color` de texto libre (de la sección anterior) se reemplazó por una variante real:
+`product_colors` (`id`, `product_id`, `name`, `hex` opcional, `price` opcional, `stock`,
+`sort_order`), y `product_images` ganó una `product_color_id` opcional — así que un color puede
+tener su propia **galería completa de fotos** (no solo una imagen), su propio **precio** (si se
+deja vacío, usa el del producto — `ProductColor::effective_price`) y su propio **stock
+independiente**. Un producto sin colores sigue funcionando exactamente igual que antes (su propio
+`price`/`stock`), y un producto *con* colores delega su disponibilidad y precio a ellos por
+completo — decisión explícita, no una casualidad: se decidió así al construir esto en vez de la
+opción más simple (stock compartido, una sola imagen por color) porque el pedido original
+mencionaba precio propio por color, y eso solo tiene sentido de punta a punta (carrito → checkout
+→ pedido) si el color también controla su propio stock — si no, ¿qué evita vender más "rojos" de
+los que hay?
+
+- **Admin** (`/admin/productos/{id}/colores`, mismo permiso `products.manage`): CRUD de colores
+  con el mismo patrón de imágenes que ya usan productos (`WithFileUploads` + `ResponsiveImage`,
+  cada foto con sus 3 variantes WebP). Sin papelera — igual que banners, un color es una parte
+  poseída de un producto, sin nada más que lo referencie. `Product::margin_amount` y compañía
+  (costo/precio mayoreo) siguen siendo por producto, no por color — no se pidió que variaran por
+  color y hubiera sido alcance extra sin necesidad real.
+- **Tienda**: en la ficha del producto, los swatches (miniatura de la primera foto del color, o un
+  punto de su `hex` si todavía no tiene fotos) cambian la foto principal, la galería de miniaturas
+  y el precio mostrado **sin recargar la página** — todo en Alpine puro con los datos de cada color
+  ya embebidos en la página (`@js(...)`), no una llamada a servidor por cada clic. El componente
+  `<livewire:add-to-cart>` (que sí necesita saber el color elegido para validar stock/precio en el
+  servidor) se mantiene sincronizado vía el helper global `Livewire.dispatch('color-selected', ...)`
+  desde Alpine, capturado por `#[On('color-selected')]` en `App\Livewire\AddToCart` — funciona sin
+  importar que las dos piezas vivan en sitios distintos del DOM (la galería es Blade+Alpine plano,
+  fuera del componente Livewire).
+- **Carrito**: cada línea ahora se identifica por `"{product_id}:{color_id}"`
+  (`App\Services\Cart::lineKey()`), no solo `product_id` — el mismo producto en dos colores
+  distintos son dos líneas separadas, cada una con su propio precio/stock máximo. `Cart::add()`
+  cambió de firma (`add($productId, $quantity)` → `add($productId, $colorId, $quantity)`).
+- **Checkout**: bloquea (`lockForUpdate()`) y descuenta el stock del **color** elegido cuando hay
+  uno, en vez del producto — el producto solo se bloquea para leer su precio/nombre. `OrderItem`
+  ganó `color_name` (snapshot de texto, mismo patrón que `product_name` — no una FK, así que un
+  color borrado después nunca afecta pedidos ya hechos), mostrado en las tres pantallas que ya
+  listaban pedidos (éxito del checkout, `/admin/pedidos/{id}`, `/mis-pedidos/{id}`).
+
+**Tres bugs reales encontrados al construir esto** (además del de SQL Server con `NULL` en índices
+únicos, ya cubierto arriba):
+
+1. **SQL Server rechazó la FK `product_images.product_color_id → product_colors` con cascada**:
+   *"Introducing FOREIGN KEY constraint ... may cause cycles or multiple cascade paths"* — porque
+   `product_images` ya cascadea desde `products` vía `product_id` (toda fila de imagen, sea de un
+   color o no, conserva su `product_id`), y SQL Server no permite una segunda ruta de cascada hacia
+   la misma tabla a través de `product_colors`. La FK se dejó sin cascada (`NO ACTION`), y limpiar
+   las imágenes de un color al eliminarlo (archivos **y** filas) se volvió responsabilidad explícita
+   del código — igual que ya pasaba con los archivos en disco al eliminar permanentemente un
+   producto, solo que ahora también las filas.
+2. **Eloquent no refleja un default de columna a nivel de base de datos en el modelo recién
+   creado.** `product_colors.sort_order` tiene `->default(0)` en la migración, pero
+   `$product->colors()->create(['name' => 'Rojo', 'stock' => 5])` (sin pasar `sort_order`) deja la
+   instancia en memoria con `sort_order === null` hasta que se refresca — el formulario de edición,
+   que arranca de esa instancia, terminaba mandando `sort_order = ''` y la validación `required`
+   tronaba. Encontrado escribiendo `ProductColorsTest`, no en la app real (el formulario de "Nuevo
+   color" siempre manda `sort_order` explícito), pero se corrigió en la factory de pruebas para que
+   nadie más lo repita.
+3. **`Str::plural('color', $n)` pluraliza en inglés** — muestra *"(2 colors)"* en el listado de
+   admin en vez de *"(2 colores)"*, porque el inflector de Doctrine que usa por debajo no depende
+   del locale de la app. Mismo problema de raíz que el de las páginas de auth (`LoginForm`, etc.):
+   un helper de Laravel que resuelve texto en inglés sin que este proyecto lo note, porque nunca
+   configuró nada de i18n. Reemplazado por un ternario simple.
 
 ## Categorías destacadas y productos seleccionados
 
@@ -343,7 +406,7 @@ el resto del sitio en vez del `shadow-md` por defecto.
 
 ## Tests
 
-`php artisan test` — 95 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 106 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -369,12 +432,21 @@ esperado, `/dashboard` solo lista los pedidos del usuario logueado (nunca los de
 los de un checkout de invitado, que no tiene `user_id`), y `/mis-pedidos/{order}` responde 403 al
 intentar ver el detalle de un pedido ajeno o de invitado, el mensaje de contraseña incorrecta en
 `/login` está en español (no el fallback en inglés del framework), el header de la tienda enlaza
-a `/register` cuando no hay sesión iniciada, un admin puede capturar SKU/color/material/precio
+a `/register` cuando no hay sesión iniciada, un admin puede capturar SKU/material/precio
 mayoreo/costo en un producto y el margen (`margin_amount`/`margin_percent`) se calcula
 correctamente, dejar vacíos los campos numéricos opcionales (mayoreo/costo) no truena la
 validación (`'' !== null` en PHP — ver la sección de arriba), el SKU debe ser único entre
-productos, y la ficha pública del producto muestra color/material pero nunca el precio mayoreo ni
-el costo de producción.
+productos, y la ficha pública del producto muestra material pero nunca el precio mayoreo ni el
+costo de producción, y las variantes de color: un admin puede crear un color con precio/hex/stock
+propios y el `effective_price` cae al precio del producto cuando no se define uno propio, editar
+el color de otro producto por URL responde 403, subir y borrar fotos de un color genera/limpia sus
+variantes responsivas igual que las del producto, borrar un color limpia sus archivos **y** filas
+de la base de datos (sin cascada de por medio — ver el bug de SQL Server más arriba), el stock
+agregado de un producto sale de sumar sus colores (ignorando `products.stock`) y se reporta
+"agotado" solo cuando todos están en 0, agregar el mismo producto en dos colores genera dos líneas
+de carrito independientes, el precio propio de un color se respeta tanto en el carrito como al
+pagar, el checkout descuenta el stock del color (no el del producto) y falla limpiamente si el
+color elegido no tiene suficiente inventario.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
@@ -406,12 +478,20 @@ el link "Registrarse" visible en el header (escritorio y menú mobile) cuando no
 registro real de una cuenta nueva de punta a punta redirigiendo a "Mis pedidos" con el rol
 `customer` ya asignado, un intento de login con contraseña incorrecta mostrando el mensaje real en
 español ("Estas credenciales no coinciden con nuestros registros.", no el fallback en inglés del
-framework), y `/forgot-password` con su texto y botón ya en español, y los datos de mercadería del
-producto: crear un producto real desde `/admin/productos/nuevo` con SKU/color/material/precio
+framework), y `/forgot-password` con su texto y botón ya en español, los datos de mercadería del
+producto: crear un producto real desde `/admin/productos/nuevo` con SKU/material/precio
 mayoreo/costo (inputs llenados vía `DataTransfer`/eventos nativos, no el tool de clicks), viendo el
 margen estimado ("$120.00 (40%)") actualizarse en vivo mientras se escribe precio/costo, guardarlo
 y verlo en el listado de admin con su SKU, la migración corriendo limpio contra SQL Server real
 (incluyendo el índice único filtrado y su rollback), un segundo producto con el mismo SKU
-rechazado con el mensaje en español ("Este SKU ya está en uso por otro producto."), y la ficha
-pública del producto mostrando "Color: Rojo, Azul, Negro" / "Material: Algodón 100%" mientras el
-HTML completo de la página (no solo el texto visible) nunca contiene el precio mayoreo ni el costo.
+rechazado con el mensaje en español ("Este SKU ya está en uso por otro producto."), y las variantes
+de color: crear dos colores reales para un producto ("Negro" con precio propio $950, "Blanco" sin
+precio propio) con foto real subida a cada uno, la ficha pública mostrando "Color: Negro"
+preseleccionado con el precio $950 (no el $899 base) y la foto correcta, hacer clic en el swatch
+"Blanco" y confirmar — sin recargar la página — que la foto, el precio ($899, el del producto) y
+la etiqueta de color cambian juntos, agregar el mismo producto en ambos colores al carrito y
+verificar que aparecen como dos líneas independientes con su propio precio, completar el checkout
+y confirmar que descuenta el stock del **color** correcto (8→7 y 3→2) dejando el `stock` del
+producto intacto, que el listado de admin muestra el stock agregado (9, no 40) con la etiqueta
+"(2 colores)" en español, y que el pedido resultante muestra "(Blanco)"/"(Negro)" junto al nombre
+del producto tanto en la pantalla de éxito como en `/admin/pedidos` y `/mis-pedidos`.

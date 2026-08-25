@@ -2,6 +2,7 @@
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductColor;
 use App\Services\Cart;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
@@ -27,7 +28,9 @@ new #[Layout('components.storefront-shell', ['title' => 'Checkout', 'noindex' =>
      * recomputed from the database, never trusted from the client — here
      * the "client" is the session cart, but the rule is the same. Row
      * locking (lockForUpdate) stops two simultaneous checkouts from both
-     * overselling the last unit of stock.
+     * overselling the last unit of stock — now locking whichever row
+     * actually owns the stock for that line: the ProductColor when one
+     * was chosen, the Product itself otherwise.
      */
     public function placeOrder(): void
     {
@@ -38,16 +41,16 @@ new #[Layout('components.storefront-shell', ['title' => 'Checkout', 'noindex' =>
             'shipping_address' => ['required', 'string', 'max:1000'],
         ]);
 
-        $cartItems = Cart::raw();
+        $cartLines = Cart::raw();
 
-        if (empty($cartItems)) {
+        if (empty($cartLines)) {
             $this->redirect(route('cart'), navigate: true);
 
             return;
         }
 
         try {
-            $order = DB::transaction(function () use ($validated, $cartItems) {
+            $order = DB::transaction(function () use ($validated, $cartLines) {
                 $order = Order::create([
                     'user_id' => auth()->id(),
                     'customer_name' => $validated['customer_name'],
@@ -60,29 +63,43 @@ new #[Layout('components.storefront-shell', ['title' => 'Checkout', 'noindex' =>
 
                 $total = 0;
 
-                foreach ($cartItems as $productId => $quantity) {
+                foreach ($cartLines as $line) {
                     $product = Product::where('is_active', true)
                         ->lockForUpdate()
-                        ->findOrFail($productId);
+                        ->findOrFail($line['product_id']);
 
-                    if ($product->stock < $quantity) {
+                    $color = $line['color_id']
+                        ? ProductColor::where('product_id', $product->id)->lockForUpdate()->findOrFail($line['color_id'])
+                        : null;
+
+                    $availableStock = $color ? $color->stock : $product->stock;
+                    $quantity = $line['quantity'];
+                    $label = $product->name.($color ? " ({$color->name})" : '');
+
+                    if ($availableStock < $quantity) {
                         throw \Illuminate\Validation\ValidationException::withMessages([
-                            'shipping_address' => "No hay suficiente inventario de \"{$product->name}\".",
+                            'shipping_address' => "No hay suficiente inventario de \"{$label}\".",
                         ]);
                     }
 
-                    $subtotal = $product->price * $quantity;
+                    $unitPrice = $color?->effective_price ?? $product->price;
+                    $subtotal = $unitPrice * $quantity;
                     $total += $subtotal;
 
                     $order->items()->create([
                         'product_id' => $product->id,
                         'product_name' => $product->name,
-                        'unit_price' => $product->price,
+                        'color_name' => $color?->name,
+                        'unit_price' => $unitPrice,
                         'quantity' => $quantity,
                         'subtotal' => $subtotal,
                     ]);
 
-                    $product->decrement('stock', $quantity);
+                    if ($color) {
+                        $color->decrement('stock', $quantity);
+                    } else {
+                        $product->decrement('stock', $quantity);
+                    }
                 }
 
                 $order->update(['total' => $total]);
@@ -150,7 +167,7 @@ new #[Layout('components.storefront-shell', ['title' => 'Checkout', 'noindex' =>
             <div class="mt-3 divide-y divide-gray-200 border-y border-gray-200">
                 @foreach ($items as $item)
                     <div class="flex items-center justify-between py-3 text-sm">
-                        <span>{{ $item->product->name }} &times; {{ $item->quantity }}</span>
+                        <span>{{ $item->product->name }}{{ $item->color ? " ({$item->color->name})" : '' }} &times; {{ $item->quantity }}</span>
                         <span class="font-medium">${{ number_format($item->subtotal, 2) }}</span>
                     </div>
                 @endforeach

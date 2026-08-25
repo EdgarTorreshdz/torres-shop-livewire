@@ -38,7 +38,7 @@ class CustomerOrdersTest extends TestCase
         }
 
         $product = Product::factory()->create(['price' => 100, 'stock' => 5, 'is_active' => true]);
-        Cart::add($product->id, 1);
+        Cart::add($product->id, null, 1);
 
         Volt::test('storefront.checkout')
             ->set('customer_name', $name)

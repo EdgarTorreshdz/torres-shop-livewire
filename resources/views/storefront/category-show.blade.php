@@ -25,8 +25,8 @@
             @forelse ($products as $product)
                 <a href="{{ route('product.show', $product->slug) }}" wire:navigate class="block rounded-lg border border-gray-200 p-4 hover:border-gray-400">
                     <x-responsive-image
-                        :src="$product->images->first()?->url"
-                        :srcset="$product->images->first()?->srcset"
+                        :src="$product->display_image?->url"
+                        :srcset="$product->display_image?->srcset"
                         sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                         :alt="$product->name"
                         class="aspect-square w-full rounded object-cover bg-gray-100"

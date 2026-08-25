@@ -6,7 +6,7 @@
         <div class="mt-8 divide-y divide-gray-200 rounded-lg border border-gray-200 text-left">
             @foreach ($order->items as $item)
                 <div class="flex items-center justify-between px-4 py-3 text-sm">
-                    <span>{{ $item->product_name }} &times; {{ $item->quantity }}</span>
+                    <span>{{ $item->product_name }}{{ $item->color_name ? " ({$item->color_name})" : '' }} &times; {{ $item->quantity }}</span>
                     <span class="font-medium">${{ number_format($item->subtotal, 2) }}</span>
                 </div>
             @endforeach

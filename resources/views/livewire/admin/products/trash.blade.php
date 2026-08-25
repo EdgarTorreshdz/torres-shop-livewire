@@ -29,19 +29,26 @@ new #[Layout('layouts.app')] class extends Component
 
     /**
      * Permanent — also has to clean up the actual image files (originals
-     * plus every responsive variant) on disk first: the product_images
-     * rows themselves cascade-delete at the database level once the
-     * product row is really gone, but that FK cascade never touches the
-     * filesystem, so skipping this would leave orphaned files behind
-     * forever.
+     * plus every responsive variant) on disk first, both the product's
+     * own base gallery and every color's own gallery: the product_images/
+     * product_colors *rows* cascade-delete at the database level once the
+     * product row is really gone (both have a direct FK to products), but
+     * that FK cascade never touches the filesystem, so skipping this
+     * would leave orphaned files behind forever.
      */
     public function forceDelete(int $productId): void
     {
-        $product = Product::onlyTrashed()->with('images')->findOrFail($productId);
+        $product = Product::onlyTrashed()->with(['images', 'colors.images'])->findOrFail($productId);
         $name = $product->name;
 
         foreach ($product->images as $image) {
             ResponsiveImage::delete($image->path);
+        }
+
+        foreach ($product->colors as $color) {
+            foreach ($color->images as $image) {
+                ResponsiveImage::delete($image->path);
+            }
         }
 
         $product->forceDelete();

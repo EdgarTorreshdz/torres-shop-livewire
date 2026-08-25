@@ -39,12 +39,20 @@ new #[Layout('components.storefront-shell', ['title' => 'Tienda', 'description' 
     public function with(): array
     {
         $products = Product::query()
-            ->with('images')
+            ->with(['images', 'colors.images'])
             ->where('is_active', true)
             ->when($this->category, fn ($q) => $q->whereHas('category', fn ($q) => $q->where('slug', $this->category)))
             ->when($this->minPrice !== null, fn ($q) => $q->where('price', '>=', $this->minPrice))
             ->when($this->maxPrice !== null, fn ($q) => $q->where('price', '<=', $this->maxPrice))
-            ->when($this->inStock, fn ($q) => $q->where('stock', '>', 0))
+            // A product with colors delegates its availability to them —
+            // products.stock alone can no longer answer "is this in
+            // stock" once colors exist (see Product::is_in_stock), so
+            // this checks both: no colors + its own stock, OR at least
+            // one color with stock.
+            ->when($this->inStock, fn ($q) => $q->where(
+                fn ($q2) => $q2->where(fn ($q3) => $q3->doesntHave('colors')->where('stock', '>', 0))
+                    ->orWhereHas('colors', fn ($q3) => $q3->where('stock', '>', 0))
+            ))
             ->orderBy('name')
             ->paginate(9);
 
@@ -98,15 +106,15 @@ new #[Layout('components.storefront-shell', ['title' => 'Tienda', 'description' 
                 @forelse ($products as $product)
                     <a href="{{ route('product.show', $product->slug) }}" wire:navigate class="block rounded-lg border border-gray-200 p-4 hover:border-gray-400">
                         <x-responsive-image
-                            :src="$product->images->first()?->url"
-                            :srcset="$product->images->first()?->srcset"
+                            :src="$product->display_image?->url"
+                            :srcset="$product->display_image?->srcset"
                             sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                             :alt="$product->name"
                             class="aspect-square w-full rounded object-cover bg-gray-100"
                         />
                         <h3 class="mt-3 font-medium text-gray-900">{{ $product->name }}</h3>
                         <p class="mt-1 font-semibold text-gray-900">${{ number_format($product->price, 2) }}</p>
-                        @if ($product->stock <= 0)
+                        @if (! $product->is_in_stock)
                             <p class="mt-1 text-xs text-red-600">Agotado</p>
                         @endif
                     </a>

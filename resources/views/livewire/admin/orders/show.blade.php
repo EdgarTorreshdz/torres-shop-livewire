@@ -43,7 +43,7 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="mt-6 divide-y divide-gray-200 border-y border-gray-200">
                     @foreach ($order->items as $item)
                         <div class="flex items-center justify-between py-3 text-sm">
-                            <span>{{ $item->product_name }} &times; {{ $item->quantity }}</span>
+                            <span>{{ $item->product_name }}{{ $item->color_name ? " ({$item->color_name})" : '' }} &times; {{ $item->quantity }}</span>
                             <span class="font-medium">${{ number_format($item->subtotal, 2) }}</span>
                         </div>
                     @endforeach

@@ -11,8 +11,8 @@
                     class="block w-48 shrink-0 snap-start rounded-lg border border-gray-200 p-4 hover:border-gray-400"
                 >
                     <x-responsive-image
-                        :src="$product->images->first()?->url"
-                        :srcset="$product->images->first()?->srcset"
+                        :src="$product->display_image?->url"
+                        :srcset="$product->display_image?->srcset"
                         sizes="192px"
                         :alt="$product->name"
                         class="aspect-square w-full rounded object-cover bg-gray-100"

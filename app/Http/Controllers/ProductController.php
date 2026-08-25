@@ -19,13 +19,13 @@ class ProductController extends Controller
      */
     public function show(string $slug): View
     {
-        $product = Product::with(['category', 'images'])
+        $product = Product::with(['category', 'images', 'colors.images'])
             ->where('slug', $slug)
             ->where('is_active', true)
             ->firstOrFail();
 
         $relatedProducts = $product->category_id
-            ? Product::with('images')
+            ? Product::with(['images', 'colors.images'])
                 ->where('category_id', $product->category_id)
                 ->where('id', '!=', $product->id)
                 ->where('is_active', true)
@@ -34,7 +34,7 @@ class ProductController extends Controller
                 ->get()
             : collect();
 
-        $featuredProducts = Product::with('images')
+        $featuredProducts = Product::with(['images', 'colors.images'])
             ->where('is_active', true)
             ->whereNotNull('featured_order')
             ->where('id', '!=', $product->id)
