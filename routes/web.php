@@ -50,6 +50,10 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Volt::route('/categorias/papelera', 'admin.categories.trash')->name('categorias.papelera');
     Volt::route('/categorias/{category}', 'admin.categories.form')->name('categorias.editar');
 
+    Volt::route('/banners', 'admin.banners.index')->name('banners');
+    Volt::route('/banners/nuevo', 'admin.banners.form')->name('banners.nuevo');
+    Volt::route('/banners/{banner}', 'admin.banners.form')->name('banners.editar');
+
     Volt::route('/usuarios', 'admin.users-index')->name('usuarios');
     Volt::route('/usuarios/{user}', 'admin.user-edit')->name('usuarios.editar');
 

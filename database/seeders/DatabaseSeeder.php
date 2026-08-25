@@ -28,6 +28,7 @@ class DatabaseSeeder extends Seeder
         $permissions = [
             'products.manage',
             'categories.manage',
+            'banners.manage',
             'orders.manage',
             'users.manage',
             'activity.view',

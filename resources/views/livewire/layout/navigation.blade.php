@@ -29,6 +29,7 @@ new class extends Component
         return collect([
             ['route' => 'admin.productos', 'label' => 'Productos', 'permission' => 'products.manage'],
             ['route' => 'admin.categorias', 'label' => 'Categorías', 'permission' => 'categories.manage'],
+            ['route' => 'admin.banners', 'label' => 'Banners', 'permission' => 'banners.manage'],
             ['route' => 'admin.usuarios', 'label' => 'Usuarios', 'permission' => 'users.manage'],
             ['route' => 'admin.pedidos', 'label' => 'Pedidos', 'permission' => 'orders.manage'],
             ['route' => 'admin.bitacora', 'label' => 'Bitácora', 'permission' => 'activity.view'],

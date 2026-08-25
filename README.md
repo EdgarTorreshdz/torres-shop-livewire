@@ -142,6 +142,43 @@ categorías/productos existentes se destacan hoy, y en qué orden.
 - Ambas pantallas registran su cambio en la bitácora (`categories.featured_updated`/
   `products.featured_updated`) con la lista completa de nombres antes/después.
 
+## Banners dinámicos del home
+
+`/admin/banners` (permiso `banners.manage`): CRUD de banners promocionales para el carrusel del
+home, sin tabla de curación aparte — cada fila ya trae todo lo que necesita:
+
+- **Título, descripción y URL destino** (interna como `/tienda`/`/categoria/electronica`, o
+  externa completa) — se muestran sobre la imagen y son el link de todo el slide.
+- **Tres imágenes independientes** (`desktop_image_path`/`tablet_image_path`/`mobile_image_path`),
+  no tres tamaños de una sola foto: a diferencia de `ResponsiveImage::srcset()` (que genera copias
+  más chicas de la *misma* imagen para ahorrar banda), un banner de escritorio y uno de mobile
+  suelen necesitar un encuadre distinto de la misma promoción (texto/producto en otro lugar de la
+  composición), así que el admin sube un archivo por breakpoint. Cada uno igual pasa por
+  `ResponsiveImage::store()`, así que también obtiene sus propias variantes WebP por densidad de
+  píxeles dentro de su propio breakpoint.
+- **Activo/inactivo**: un toggle de un clic en el listado (`toggleActive()`), sin abrir el
+  formulario completo — solo los banners activos entran a la consulta del home.
+- **Orden manual** (`sort_order`, entero simple y siempre editable): a diferencia de "Categorías
+  destacadas"/"Productos seleccionados" (que tienen su propia pantalla de curación aparte), acá el
+  campo vive directo en el formulario — no hace falta una pantalla dedicada para algo tan chico.
+- Sin papelera: a diferencia de categorías/productos, un banner promocional no tiene pedidos ni
+  relaciones que sobrevivan a su borrado, así que `delete()` es un borrado real de una vez
+  (`$banner->delete()` + `ResponsiveImage::delete()` de las 3 imágenes), con el mismo modal de
+  confirmación del resto del admin.
+
+**`<x-banner-carousel>`** (home únicamente, `resources/views/components/banner-carousel.blade.php`)
+renderiza cada banner activo como un `<picture>` con tres `<source media="...">` — uno por
+breakpoint — dejando que el navegador elija el archivo correcto según el ancho real de la
+ventana, no un JS que detecte el viewport. Auto-avanza cada 6s (Alpine `setInterval`, con
+pausa al pasar el mouse), con flechas y puntos si hay más de un banner activo, y no se renderiza
+nada en absoluto si no hay ninguno — el home nunca muestra una caja gris vacía a la espera de que
+un admin suba algo.
+
+`Home::with()` solo pasa banners que son **a la vez** activos **y** tienen ya alguna imagen
+cargada — un admin puede activar un banner antes de subirle fotos (el toggle y las imágenes son
+campos independientes), y sin este filtro esa combinación produciría un `<img src="">` roto en
+producción.
+
 ## Sistema de alertas del admin
 
 Todo el lado administrativo usa un sistema propio de toasts y confirmaciones — nada de
@@ -207,7 +244,7 @@ seleccionados) por el scope global que agrega el trait — sin tocar una sola qu
 
 ## Tests
 
-`php artisan test` — 76 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 83 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -224,8 +261,12 @@ eliminar una categoría/producto lo excluye de todas las consultas normales pero
 existiendo (`withTrashed()`), aparece en su papelera y se puede restaurar o eliminar
 permanentemente, eliminar un producto permanentemente borra sus archivos de imagen del disco,
 subir una imagen genera el original más las 3 variantes WebP responsivas, `srcset()` nunca
-apunta a una variante que no existe en disco, y `ResponsiveImage::delete()` limpia el original y
-sus variantes juntos.
+apunta a una variante que no existe en disco, `ResponsiveImage::delete()` limpia el original y
+sus variantes juntos, crear/editar un banner registra `old_values`/`new_values` en la bitácora,
+activar/desactivar un banner desde el listado queda registrado, borrar un banner lo elimina junto
+con sus 3 imágenes, subir las 3 imágenes de un banner genera variantes responsivas para cada una,
+y el home solo muestra los banners activos que además ya tienen alguna imagen cargada, en el
+orden esperado.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
@@ -240,4 +281,10 @@ restaurarlo y confirmar que vuelve a estar disponible, y las imágenes responsiv
 de una foto de 2400×2400px, verificación de que el navegador descarga la variante WebP de
 768px (~1KB) en vez del original (~90KB) tanto en viewport de escritorio como en uno móvil
 emulado con densidad de píxeles 2x (donde correctamente pide una variante más grande para
-compensar), y que un producto sin imagen sigue mostrando el placeholder gris sin romper nada.
+compensar), que un producto sin imagen sigue mostrando el placeholder gris sin romper nada, y el
+carrusel de banners del home: creación de un banner con subida real de sus 3 imágenes (escritorio/
+tablet/mobile) vía inputs de archivo simulados con `DataTransfer`, verificación de que cada
+breakpoint (`resize_window` a mobile/tablet/desktop) efectivamente carga el archivo correcto
+según el `<picture><source media="...">` correspondiente (`img.currentSrc` distinto en cada uno),
+desactivar el banner lo hace desaparecer del home de inmediato, y borrarlo vía el modal de
+confirmación real elimina también sus archivos de disco sin dejar huérfanos.

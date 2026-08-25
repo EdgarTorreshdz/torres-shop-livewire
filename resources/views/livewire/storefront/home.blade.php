@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Banner;
 use App\Models\Category;
 use App\Models\Product;
 use Livewire\Attributes\Layout;
@@ -21,6 +22,12 @@ new #[Layout('components.storefront-shell', ['description' => 'Productos que sim
         }
 
         return [
+            // "Activo" alone isn't enough to render a slide — an admin can
+            // flip the toggle before uploading any image, and a banner
+            // with no image at all would otherwise render a broken <img>.
+            'banners' => Banner::where('is_active', true)
+                ->where(fn ($q) => $q->whereNotNull('desktop_image_path')->orWhereNotNull('tablet_image_path')->orWhereNotNull('mobile_image_path'))
+                ->orderBy('sort_order')->orderBy('id')->get(),
             'categories' => Category::has('products')->orderBy('name')->get(),
             'featured' => $featured,
         ];
@@ -28,6 +35,8 @@ new #[Layout('components.storefront-shell', ['description' => 'Productos que sim
 }; ?>
 
 <div>
+    <x-banner-carousel :banners="$banners" />
+
     <section class="bg-gray-900 py-20 text-center text-white">
         <div class="mx-auto max-w-3xl px-4">
             <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">Torres Shop</h1>

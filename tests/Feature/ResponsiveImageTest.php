@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Banner;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -21,7 +22,7 @@ class ResponsiveImageTest extends TestCase
     private function admin(): User
     {
         foreach ([
-            'products.manage', 'categories.manage', 'orders.manage',
+            'products.manage', 'categories.manage', 'banners.manage', 'orders.manage',
             'users.manage', 'activity.view', 'roles.manage',
         ] as $permission) {
             Permission::findOrCreate($permission);
@@ -142,5 +143,25 @@ class ResponsiveImageTest extends TestCase
         $category = Category::where('name', 'Con Imagen Responsiva')->firstOrFail();
         $this->assertNotNull($category->banner_srcset);
         $this->assertStringContainsString('1200w', $category->banner_srcset);
+    }
+
+    public function test_uploading_the_three_banner_images_generates_responsive_variants_for_each(): void
+    {
+        Storage::fake('public');
+        $this->actingAs($this->admin());
+
+        Volt::test('admin.banners.form')
+            ->set('title', 'Banner Con Imágenes')
+            ->set('url', '/tienda')
+            ->set('desktopImage', UploadedFile::fake()->image('desktop.jpg', 1920, 600))
+            ->set('tabletImage', UploadedFile::fake()->image('tablet.jpg', 1200, 900))
+            ->set('mobileImage', UploadedFile::fake()->image('mobile.jpg', 800, 1000))
+            ->call('save');
+
+        $banner = Banner::where('title', 'Banner Con Imágenes')->firstOrFail();
+        $this->assertNotNull($banner->desktop_srcset);
+        $this->assertNotNull($banner->tablet_srcset);
+        $this->assertNotNull($banner->mobile_srcset);
+        $this->assertStringContainsString('1200w', $banner->desktop_srcset);
     }
 }
