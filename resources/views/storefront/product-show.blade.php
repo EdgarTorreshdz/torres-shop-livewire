@@ -42,4 +42,7 @@
             </div>
         </div>
     </div>
+
+    <x-product-carousel title="Productos de la misma categoría" :products="$relatedProducts" />
+    <x-product-carousel title="Productos seleccionados" :products="$featuredProducts" />
 </x-storefront-shell>

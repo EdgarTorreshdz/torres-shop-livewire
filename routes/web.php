@@ -40,10 +40,12 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 
     Volt::route('/productos', 'admin.products.index')->name('productos');
     Volt::route('/productos/nuevo', 'admin.products.form')->name('productos.nuevo');
+    Volt::route('/productos/destacados', 'admin.products.featured')->name('productos.destacados');
     Volt::route('/productos/{product}', 'admin.products.form')->name('productos.editar');
 
     Volt::route('/categorias', 'admin.categories.index')->name('categorias');
     Volt::route('/categorias/nueva', 'admin.categories.form')->name('categorias.nueva');
+    Volt::route('/categorias/destacadas', 'admin.categories.featured')->name('categorias.destacadas');
     Volt::route('/categorias/{category}', 'admin.categories.form')->name('categorias.editar');
 
     Volt::route('/usuarios', 'admin.users-index')->name('usuarios');

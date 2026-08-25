@@ -21,6 +21,7 @@ class Product extends Model
         'price',
         'stock',
         'is_active',
+        'featured_order',
     ];
 
     protected function casts(): array
@@ -34,6 +35,7 @@ class Product extends Model
             'price' => 'decimal:2',
             'stock' => 'integer',
             'is_active' => 'boolean',
+            'featured_order' => 'integer',
         ];
     }
 

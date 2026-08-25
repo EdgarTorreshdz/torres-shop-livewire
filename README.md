@@ -83,11 +83,39 @@ Igual que `torres-shop-api`, pero con `spatie/laravel-permission` sobre un únic
   criterio, así un usuario con un permiso suelto no ve enlaces a secciones a las que de todos
   modos rebotaría con 403.
 
-## Imágenes de producto
+## Imágenes de producto y categoría
 
-Igual que `torres-shop-api`: un producto tiene muchas imágenes (`product_images`), subidas vía
-`Livewire\WithFileUploads` y guardadas en el disco `public` (local hoy, config-only para migrar a
-S3/R2/Spaces más adelante).
+Un producto tiene muchas imágenes (`product_images`); una categoría tiene un banner de escritorio
+y uno móvil (`banner_image_path`/`mobile_image_path`). Ambos usan subida real de archivo vía
+`Livewire\WithFileUploads`, guardados en el disco `public` (local hoy, config-only para migrar a
+S3/R2/Spaces más adelante) — el modelo `Category` expone `banner_image_url`/`mobile_image_url`
+como accessors computados a partir del path, así que nada que ya usara esos nombres tuvo que
+cambiar. (Los campos de categoría empezaron como URL de texto plano al portar este proyecto desde
+`torres-shop`/`torres-shop-api` — donde sí quedaron así por alcance limitado — y se corrigieron
+acá para subir el archivo real, igual que ya funcionaba en productos.)
+
+## Categorías destacadas y productos seleccionados
+
+Dos listas curadas a mano desde el admin, ambas implementadas igual: una columna
+`featured_order` (nullable) en la tabla — `null` = no aparece en la lista curada, un número = su
+posición ahí. Sin tabla pivote aparte, sin relación con fecha/temporada real: es simplemente qué
+categorías/productos existentes se destacan hoy, y en qué orden.
+
+- **`/admin/categorias/destacadas`** (permiso `categories.manage`): elige qué categorías aparecen
+  en el dropdown "Categorías" del header de la tienda (`components/storefront-shell.blade.php`) y
+  en qué orden. Las categorías no destacadas siguen apareciendo en el grid del home
+  (`Category::has('products')`, sin cambios) — el dropdown del header es la única vista que
+  filtra por `featured_order`.
+- **`/admin/productos/destacados`** (permiso `products.manage`): elige qué productos aparecen (1)
+  en la sección "Productos destacados" del home — con fallback a los 6 más recientes si todavía no
+  se ha curado nada — y (2) en el bloque "Productos seleccionados" de la ficha de cada producto.
+- La ficha de producto (`/producto/{slug}`) agrega dos carruseles debajo de la info principal,
+  ambos vía el componente reutilizable `<x-product-carousel>` (scroll horizontal con
+  `snap-x`/`snap-mandatory` de Tailwind, sin librería de JS): "Productos de la misma categoría"
+  (mismo `category_id`, excluyendo el producto actual) y "Productos seleccionados" (la lista
+  curada de arriba).
+- Ambas pantallas registran su cambio en la bitácora (`categories.featured_updated`/
+  `products.featured_updated`) con la lista completa de nombres antes/después.
 
 ## Usuarios de prueba (seed)
 
@@ -98,14 +126,17 @@ S3/R2/Spaces más adelante).
 
 ## Tests
 
-`php artisan test` — 48 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 55 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
 403 en `/admin/productos`, CRUD de productos/categorías registra `old_values`/`new_values`
 correctos en la bitácora, CRUD de roles respeta la protección de `admin`/`customer`, un rol
 personalizado con solo `activity.view` o `roles.manage` accede a su sección sin ser admin,
-cambiar el rol de un usuario queda registrado con el rol anterior y el nuevo.
+cambiar el rol de un usuario queda registrado con el rol anterior y el nuevo, subir un banner de
+categoría como archivo real (`Storage::fake`) queda en disco y el accessor arma la URL completa,
+curar categorías/productos destacados actualiza `featured_order` correctamente y el nav/home/
+ficha de producto reflejan solo lo curado.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido

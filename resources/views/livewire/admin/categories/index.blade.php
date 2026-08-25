@@ -53,24 +53,39 @@ new #[Layout('layouts.app')] class extends Component
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <div class="mb-4 flex items-center justify-between">
                     <input type="search" wire:model.live.debounce.300ms="search" placeholder="Buscar por nombre..." class="w-full max-w-xs rounded border-gray-300 text-sm" />
-                    <a href="{{ route('admin.categorias.nueva') }}" wire:navigate class="rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">
-                        Nueva categoría
-                    </a>
+                    <div class="flex gap-3">
+                        <a href="{{ route('admin.categorias.destacadas') }}" wire:navigate class="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Categorías destacadas
+                        </a>
+                        <a href="{{ route('admin.categorias.nueva') }}" wire:navigate class="rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">
+                            Nueva categoría
+                        </a>
+                    </div>
                 </div>
 
                 <table class="w-full text-left text-sm">
                     <thead>
                         <tr class="border-b text-gray-500">
+                            <th class="py-2 pr-4"></th>
                             <th class="py-2 pr-4">Nombre</th>
                             <th class="py-2 pr-4">Slug</th>
+                            <th class="py-2 pr-4">Destacada</th>
                             <th class="py-2">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($categories as $category)
                             <tr class="border-b" wire:key="category-{{ $category->id }}">
+                                <td class="py-2 pr-4">
+                                    @if ($category->banner_image_url)
+                                        <img src="{{ $category->banner_image_url }}" alt="" class="h-10 w-16 rounded object-cover" />
+                                    @else
+                                        <div class="h-10 w-16 rounded bg-gray-100"></div>
+                                    @endif
+                                </td>
                                 <td class="py-2 pr-4">{{ $category->name }}</td>
                                 <td class="py-2 pr-4 text-gray-500">{{ $category->slug }}</td>
+                                <td class="py-2 pr-4 text-gray-500">{{ $category->featured_order !== null ? "#{$category->featured_order}" : '—' }}</td>
                                 <td class="py-2">
                                     <a href="{{ route('admin.categorias.editar', $category) }}" wire:navigate class="text-indigo-600 hover:underline">Editar</a>
                                     <button
@@ -84,7 +99,7 @@ new #[Layout('layouts.app')] class extends Component
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="3" class="py-6 text-center text-gray-500">No hay categorías todavía.</td></tr>
+                            <tr><td colspan="5" class="py-6 text-center text-gray-500">No hay categorías todavía.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

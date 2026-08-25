@@ -9,9 +9,20 @@ new #[Layout('components.storefront-shell', ['description' => 'Productos que sim
 {
     public function with(): array
     {
+        // Curated list from /admin/productos/destacados. Falls back to the
+        // 6 most recent active products so the home page isn't empty before
+        // an admin has picked anything — once at least one product is
+        // curated, the fallback stops applying (the curated list is
+        // authoritative, even with just one item in it).
+        $featured = Product::where('is_active', true)->whereNotNull('featured_order')->orderBy('featured_order')->get();
+
+        if ($featured->isEmpty()) {
+            $featured = Product::where('is_active', true)->latest()->limit(6)->get();
+        }
+
         return [
             'categories' => Category::has('products')->orderBy('name')->get(),
-            'featured' => Product::where('is_active', true)->latest()->limit(6)->get(),
+            'featured' => $featured,
         ];
     }
 }; ?>

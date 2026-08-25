@@ -24,8 +24,27 @@ class ProductController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
+        $relatedProducts = $product->category_id
+            ? Product::with('images')
+                ->where('category_id', $product->category_id)
+                ->where('id', '!=', $product->id)
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->limit(12)
+                ->get()
+            : collect();
+
+        $featuredProducts = Product::with('images')
+            ->where('is_active', true)
+            ->whereNotNull('featured_order')
+            ->where('id', '!=', $product->id)
+            ->orderBy('featured_order')
+            ->get();
+
         return view('storefront.product-show', [
             'product' => $product,
+            'relatedProducts' => $relatedProducts,
+            'featuredProducts' => $featuredProducts,
             'seoTitle' => $product->meta_title ?: $product->name,
             'seoDescription' => $product->meta_description ?: $product->description,
         ]);

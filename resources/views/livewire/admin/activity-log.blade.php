@@ -101,10 +101,10 @@ new #[Layout('layouts.app')] class extends Component
                                                             <tr class="border-t border-gray-100">
                                                                 <td class="py-1 pr-3 font-medium text-gray-500">{{ $key }}</td>
                                                                 @if ($log->old_values)
-                                                                    <td class="py-1 pr-3">{{ is_array($log->old_values[$key] ?? null) ? implode(', ', $log->old_values[$key]) : (($log->old_values[$key] ?? '') !== '' ? $log->old_values[$key] : '—') }}</td>
+                                                                    <td class="py-1 pr-3">{{ is_array($log->old_values[$key] ?? null) ? (implode(', ', $log->old_values[$key]) ?: '—') : (($log->old_values[$key] ?? '') !== '' ? $log->old_values[$key] : '—') }}</td>
                                                                 @endif
                                                                 @if ($log->new_values)
-                                                                    <td class="py-1">{{ is_array($log->new_values[$key] ?? null) ? implode(', ', $log->new_values[$key]) : (($log->new_values[$key] ?? '') !== '' ? $log->new_values[$key] : '—') }}</td>
+                                                                    <td class="py-1">{{ is_array($log->new_values[$key] ?? null) ? (implode(', ', $log->new_values[$key]) ?: '—') : (($log->new_values[$key] ?? '') !== '' ? $log->new_values[$key] : '—') }}</td>
                                                                 @endif
                                                             </tr>
                                                         @endforeach

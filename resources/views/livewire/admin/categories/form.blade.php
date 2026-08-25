@@ -2,20 +2,28 @@
 
 use App\Models\ActivityLog;
 use App\Models\Category;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use WithFileUploads;
+
     public ?Category $category = null;
 
     public string $name = '';
     public string $description = '';
-    public string $banner_image_url = '';
-    public string $mobile_image_url = '';
     public string $meta_title = '';
     public string $meta_description = '';
+
+    /** @var \Illuminate\Http\UploadedFile|null newly-picked banner, replacing the stored one on save */
+    public $bannerImage = null;
+
+    /** @var \Illuminate\Http\UploadedFile|null */
+    public $mobileImage = null;
 
     public function mount(?Category $category = null): void
     {
@@ -25,8 +33,6 @@ new #[Layout('layouts.app')] class extends Component
             $this->category = $category;
             $this->name = $category->name;
             $this->description = $category->description ?? '';
-            $this->banner_image_url = $category->banner_image_url ?? '';
-            $this->mobile_image_url = $category->mobile_image_url ?? '';
             $this->meta_title = $category->meta_title ?? '';
             $this->meta_description = $category->meta_description ?? '';
         }
@@ -37,11 +43,12 @@ new #[Layout('layouts.app')] class extends Component
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'banner_image_url' => ['nullable', 'string', 'max:2048'],
-            'mobile_image_url' => ['nullable', 'string', 'max:2048'],
             'meta_title' => ['nullable', 'string', 'max:255'],
             'meta_description' => ['nullable', 'string', 'max:320'],
+            'bannerImage' => ['nullable', 'image', 'max:4096'],
+            'mobileImage' => ['nullable', 'image', 'max:4096'],
         ]);
+        unset($validated['bannerImage'], $validated['mobileImage']);
 
         if ($this->category) {
             $before = ActivityLog::snapshot($this->category);
@@ -50,6 +57,7 @@ new #[Layout('layouts.app')] class extends Component
                 $validated['slug'] = $this->uniqueSlug($validated['name'], $this->category->id);
             }
 
+            $this->storeImages($validated);
             $this->category->update($validated);
 
             ActivityLog::record(
@@ -63,6 +71,13 @@ new #[Layout('layouts.app')] class extends Component
         } else {
             $validated['slug'] = $this->uniqueSlug($validated['name']);
             $newCategory = Category::create($validated);
+            $this->category = $newCategory;
+
+            $imageUpdates = [];
+            $this->storeImages($imageUpdates);
+            if ($imageUpdates) {
+                $newCategory->update($imageUpdates);
+            }
 
             ActivityLog::record(
                 auth()->user(),
@@ -74,6 +89,30 @@ new #[Layout('layouts.app')] class extends Component
         }
 
         $this->redirect(route('admin.categorias'), navigate: true);
+    }
+
+    /**
+     * Stores whichever of bannerImage/mobileImage were actually picked on
+     * the 'public' disk under categories/{id}/, deleting the previous file
+     * first so replacing a banner doesn't leave the old one orphaned on
+     * disk. Mutates $updates by reference so the caller can fold the new
+     * paths into the same update()/create() call as the rest of the form.
+     */
+    private function storeImages(array &$updates): void
+    {
+        if ($this->bannerImage) {
+            if ($this->category?->banner_image_path) {
+                Storage::disk('public')->delete($this->category->banner_image_path);
+            }
+            $updates['banner_image_path'] = $this->bannerImage->store("categories/{$this->category->id}", 'public');
+        }
+
+        if ($this->mobileImage) {
+            if ($this->category?->mobile_image_path) {
+                Storage::disk('public')->delete($this->category->mobile_image_path);
+            }
+            $updates['mobile_image_path'] = $this->mobileImage->store("categories/{$this->category->id}", 'public');
+        }
     }
 
     private function uniqueSlug(string $name, ?int $ignoreId = null): string
@@ -112,13 +151,30 @@ new #[Layout('layouts.app')] class extends Component
                     Descripción
                     <input type="text" wire:model="description" class="rounded border-gray-300" />
                 </label>
+
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Imagen banner (escritorio)
-                    <input type="url" wire:model="banner_image_url" placeholder="https://..." class="rounded border-gray-300" />
+                    @if ($category?->banner_image_url && ! $bannerImage)
+                        <img src="{{ $category->banner_image_url }}" alt="" class="mb-1 h-20 w-full rounded object-cover" />
+                    @endif
+                    @if ($bannerImage)
+                        <img src="{{ $bannerImage->temporaryUrl() }}" alt="" class="mb-1 h-20 w-full rounded object-cover" />
+                    @endif
+                    <input type="file" wire:model="bannerImage" accept="image/*" class="text-sm" />
+                    <span class="text-xs text-gray-500">Recomendado: ancha (ej. 1600×500px).</span>
+                    @error('bannerImage') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Imagen banner (móvil)
-                    <input type="url" wire:model="mobile_image_url" placeholder="https://..." class="rounded border-gray-300" />
+                    @if ($category?->mobile_image_url && ! $mobileImage)
+                        <img src="{{ $category->mobile_image_url }}" alt="" class="mb-1 h-20 w-full rounded object-cover" />
+                    @endif
+                    @if ($mobileImage)
+                        <img src="{{ $mobileImage->temporaryUrl() }}" alt="" class="mb-1 h-20 w-full rounded object-cover" />
+                    @endif
+                    <input type="file" wire:model="mobileImage" accept="image/*" class="text-sm" />
+                    <span class="text-xs text-gray-500">Recomendado: vertical/cuadrada (ej. 800×800px).</span>
+                    @error('mobileImage') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
 
                 <div class="col-span-full border-t border-gray-200 pt-4">
