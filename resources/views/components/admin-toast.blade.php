@@ -18,6 +18,14 @@
        navigations.
 
     Auto-dismisses after 4s either way.
+
+    The <script> below guards its own registration with a flag on
+    `window`: unlike the div above (patched in place, never re-executed),
+    Livewire's morph deliberately re-runs <script> tags on every
+    wire:navigate transition — that's the only way an inline script could
+    ever run again after the first page load. Without the guard, every
+    navigation added one more 'livewire:navigated' listener, so after N
+    navigations a single save would fire the same toast N times.
 --}}
 <div
     x-data="{
@@ -50,11 +58,15 @@
 </div>
 
 <script>
-    document.addEventListener('livewire:navigated', () => {
-        const raw = document.querySelector('[data-flash-toast]')?.dataset.flashToast;
-        if (!raw) return;
+    if (!window.__adminToastListenerAttached) {
+        window.__adminToastListenerAttached = true;
 
-        const { type, message } = JSON.parse(raw);
-        window.dispatchEvent(new CustomEvent('toast', { detail: { type, message } }));
-    });
+        document.addEventListener('livewire:navigated', () => {
+            const raw = document.querySelector('[data-flash-toast]')?.dataset.flashToast;
+            if (!raw) return;
+
+            const { type, message } = JSON.parse(raw);
+            window.dispatchEvent(new CustomEvent('toast', { detail: { type, message } }));
+        });
+    }
 </script>
