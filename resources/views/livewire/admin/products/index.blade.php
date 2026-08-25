@@ -23,6 +23,13 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetPage();
     }
 
+    /**
+     * Soft delete (Product uses SoftDeletes) — the row stays in the
+     * database with deleted_at set, excluded from every normal query by
+     * Eloquent's default scope, and recoverable from
+     * /admin/productos/papelera. Its images stay untouched (they're only
+     * ever cleaned up on a forceDelete, see trash.blade.php).
+     */
     public function delete(int $productId): void
     {
         $product = Product::findOrFail($productId);
@@ -32,7 +39,7 @@ new #[Layout('layouts.app')] class extends Component
 
         ActivityLog::record(auth()->user(), 'product.deleted', "Eliminó el producto \"{$name}\"", oldValues: $before);
 
-        $this->notifySuccess("Se eliminó el producto \"{$name}\".");
+        $this->notifySuccess("Se eliminó el producto \"{$name}\". Puedes restaurarlo desde la papelera.");
     }
 
     public function with(): array
@@ -58,6 +65,9 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="mb-4 flex items-center justify-between">
                     <input type="search" wire:model.live.debounce.300ms="search" placeholder="Buscar por nombre..." class="w-full max-w-xs rounded border-gray-300 text-sm" />
                     <div class="flex gap-3">
+                        <a href="{{ route('admin.productos.papelera') }}" wire:navigate class="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Papelera
+                        </a>
                         <a href="{{ route('admin.productos.destacados') }}" wire:navigate class="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                             Productos seleccionados
                         </a>
@@ -100,7 +110,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <a href="{{ route('admin.productos.editar', $product) }}" wire:navigate class="text-indigo-600 hover:underline">Editar</a>
                                     <button
                                         type="button"
-                                        x-on:click="confirmAction('¿Eliminar este producto?', () => $wire.delete({{ $product->id }}))"
+                                        x-on:click="confirmAction('¿Eliminar este producto? Podrás restaurarlo desde la papelera.', () => $wire.delete({{ $product->id }}))"
                                         class="ml-3 text-red-600 hover:underline"
                                     >
                                         Eliminar

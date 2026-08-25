@@ -148,6 +148,31 @@ Todo el lado administrativo usa un sistema propio de toasts y confirmaciones —
   ring-1 ring-red-500 @enderror`) además del texto de error que ya existía — no solo un mensaje
   perdido debajo del campo.
 
+## Borrado lógico (soft deletes)
+
+`Category` y `Product` usan `Illuminate\Database\Eloquent\SoftDeletes` — el botón "Eliminar" que
+ya existía en ambas listas no cambió de código (`$model->delete()` ya hace soft delete solo con
+el trait aplicado): el registro se queda en la base con `deleted_at`, excluido automáticamente de
+cualquier consulta normal (catálogo público, listas de admin, curación de destacados/
+seleccionados) por el scope global que agrega el trait — sin tocar una sola query existente.
+
+- **`/admin/categorias/papelera`** y **`/admin/productos/papelera`** (mismos permisos
+  `categories.manage`/`products.manage` de siempre): listan lo eliminado
+  (`Model::onlyTrashed()`), con **Restaurar** (`->restore()`, sin confirmación — es reversible) y
+  **Eliminar permanentemente** (`->forceDelete()`, con el modal de confirmación — esta sí es
+  irreversible).
+- Eliminar un producto **permanentemente** primero borra sus archivos de imagen del disco
+  (`Storage::disk('public')->delete(...)` por cada una) antes del `forceDelete()` — el `FK
+  cascadeOnDelete` de `product_images` sí se dispara en ese punto (es un delete real a nivel de
+  base de datos), pero esa cascada nunca toca el sistema de archivos, así que sin este paso las
+  imágenes quedarían huérfanas en disco para siempre.
+- Cada acción (borrar/restaurar/eliminar permanente) sigue quedando en la bitácora
+  (`category.deleted`/`category.restored`/`category.force_deleted`, mismo patrón para productos).
+- Un producto/categoría eliminada (soft) desaparece de inmediato de la tienda pública — no hace
+  falta ningún cambio en `ProductController`/`CategoryController`, el scope global ya lo cubre —
+  pero sus datos (incluyendo las imágenes de producto y las líneas de pedidos ya facturados, que
+  guardan su propio snapshot de nombre/precio) permanecen intactos y recuperables.
+
 ## Usuarios de prueba (seed)
 
 | Email | Password | Rol |
@@ -157,7 +182,7 @@ Todo el lado administrativo usa un sistema propio de toasts y confirmaciones —
 
 ## Tests
 
-`php artisan test` — 60 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 68 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -169,7 +194,10 @@ categoría como archivo real (`Storage::fake`) queda en disco y el accessor arma
 curar categorías/productos destacados actualiza `featured_order` correctamente y el nav/home/
 ficha de producto reflejan solo lo curado, crear/eliminar dispara un toast de éxito
 (`assertDispatched('toast', type: 'success')`), los intentos de acción bloqueada (quitarte tu
-propio rol de admin, borrar un rol protegido) disparan un toast de error sin cambiar nada.
+propio rol de admin, borrar un rol protegido) disparan un toast de error sin cambiar nada,
+eliminar una categoría/producto lo excluye de todas las consultas normales pero el registro sigue
+existiendo (`withTrashed()`), aparece en su papelera y se puede restaurar o eliminar
+permanentemente, y eliminar un producto permanentemente borra sus archivos de imagen del disco.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
@@ -177,5 +205,7 @@ y stock descontado en la base), bitácora con diffs reales, creación de un rol 
 verificación de que un usuario con ese rol ve solo la sección permitida en el nav y recibe 403 real
 al intentar entrar a una sección fuera de su permiso, el modal de confirmación propio (no el
 `confirm()` nativo) apareciendo y bloqueando la acción hasta confirmar, el toast de éxito
-apareciendo tanto tras un borrado en la misma página como tras un guardado con redirect, y el
-borde rojo apareciendo en un campo con error de validación real.
+apareciendo tanto tras un borrado en la misma página como tras un guardado con redirect, el borde
+rojo apareciendo en un campo con error de validación real, y el ciclo completo de borrado lógico:
+eliminar una categoría/producto (desaparece de la tienda al instante), verlo en su papelera,
+restaurarlo y confirmar que vuelve a estar disponible.

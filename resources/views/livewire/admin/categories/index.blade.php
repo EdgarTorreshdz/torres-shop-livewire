@@ -23,6 +23,12 @@ new #[Layout('layouts.app')] class extends Component
         $this->resetPage();
     }
 
+    /**
+     * Soft delete (Category uses SoftDeletes) — the row stays in the
+     * database with deleted_at set, excluded from every normal query by
+     * Eloquent's default scope, and recoverable from
+     * /admin/categorias/papelera.
+     */
     public function delete(int $categoryId): void
     {
         $category = Category::findOrFail($categoryId);
@@ -32,7 +38,7 @@ new #[Layout('layouts.app')] class extends Component
 
         ActivityLog::record(auth()->user(), 'category.deleted', "Eliminó la categoría \"{$name}\"", oldValues: $before);
 
-        $this->notifySuccess("Se eliminó la categoría \"{$name}\".");
+        $this->notifySuccess("Se eliminó la categoría \"{$name}\". Puedes restaurarla desde la papelera.");
     }
 
     public function with(): array
@@ -57,6 +63,9 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="mb-4 flex items-center justify-between">
                     <input type="search" wire:model.live.debounce.300ms="search" placeholder="Buscar por nombre..." class="w-full max-w-xs rounded border-gray-300 text-sm" />
                     <div class="flex gap-3">
+                        <a href="{{ route('admin.categorias.papelera') }}" wire:navigate class="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Papelera
+                        </a>
                         <a href="{{ route('admin.categorias.destacadas') }}" wire:navigate class="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                             Categorías destacadas
                         </a>
@@ -93,7 +102,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <a href="{{ route('admin.categorias.editar', $category) }}" wire:navigate class="text-indigo-600 hover:underline">Editar</a>
                                     <button
                                         type="button"
-                                        x-on:click="confirmAction('¿Eliminar esta categoría? Los productos que la usan quedarán sin categoría.', () => $wire.delete({{ $category->id }}))"
+                                        x-on:click="confirmAction('¿Eliminar esta categoría? Los productos que la usan quedarán sin categoría hasta que la restaures desde la papelera.', () => $wire.delete({{ $category->id }}))"
                                         class="ml-3 text-red-600 hover:underline"
                                     >
                                         Eliminar
