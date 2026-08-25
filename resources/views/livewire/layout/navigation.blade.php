@@ -28,6 +28,7 @@ new class extends Component
 
         return collect([
             ['route' => 'admin.productos', 'label' => 'Productos', 'permission' => 'products.manage'],
+            ['route' => 'admin.tallas', 'label' => 'Tallas', 'permission' => 'products.manage'],
             ['route' => 'admin.categorias', 'label' => 'Categorías', 'permission' => 'categories.manage'],
             ['route' => 'admin.banners', 'label' => 'Banners', 'permission' => 'banners.manage'],
             ['route' => 'admin.usuarios', 'label' => 'Usuarios', 'permission' => 'users.manage'],

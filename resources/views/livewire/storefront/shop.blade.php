@@ -39,19 +39,19 @@ new #[Layout('components.storefront-shell', ['title' => 'Tienda', 'description' 
     public function with(): array
     {
         $products = Product::query()
-            ->with(['images', 'colors.images'])
+            ->with(['images', 'colors.images', 'variants'])
             ->where('is_active', true)
             ->when($this->category, fn ($q) => $q->whereHas('category', fn ($q) => $q->where('slug', $this->category)))
             ->when($this->minPrice !== null, fn ($q) => $q->where('price', '>=', $this->minPrice))
             ->when($this->maxPrice !== null, fn ($q) => $q->where('price', '<=', $this->maxPrice))
-            // A product with colors delegates its availability to them —
-            // products.stock alone can no longer answer "is this in
-            // stock" once colors exist (see Product::is_in_stock), so
-            // this checks both: no colors + its own stock, OR at least
-            // one color with stock.
+            // A product with variants delegates its availability to them —
+            // products.stock alone can no longer answer "is this in stock"
+            // once a color/size matrix exists (see Product::is_in_stock),
+            // so this checks both: no variants + its own stock, OR at
+            // least one variant with stock.
             ->when($this->inStock, fn ($q) => $q->where(
-                fn ($q2) => $q2->where(fn ($q3) => $q3->doesntHave('colors')->where('stock', '>', 0))
-                    ->orWhereHas('colors', fn ($q3) => $q3->where('stock', '>', 0))
+                fn ($q2) => $q2->where(fn ($q3) => $q3->doesntHave('variants')->where('stock', '>', 0))
+                    ->orWhereHas('variants', fn ($q3) => $q3->where('stock', '>', 0))
             ))
             ->orderBy('name')
             ->paginate(9);

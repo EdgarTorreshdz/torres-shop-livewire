@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\Size;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
@@ -20,7 +21,21 @@ class DatabaseSeeder extends Seeder
     {
         $this->seedRolesAndPermissions();
         $this->seedUsers();
+        $this->seedSizes();
         $this->seedCatalog();
+    }
+
+    /**
+     * The global size catalog starts populated so /admin/productos/{id}/
+     * variantes has something to offer on a fresh install — an empty
+     * catalog makes that screen look broken rather than unconfigured. No
+     * product is assigned any of them; that's a deliberate admin choice.
+     */
+    private function seedSizes(): void
+    {
+        foreach (['XS', 'S', 'M', 'L', 'XL', 'XXL'] as $i => $name) {
+            Size::firstOrCreate(['name' => $name], ['sort_order' => $i]);
+        }
     }
 
     private function seedRolesAndPermissions(): void

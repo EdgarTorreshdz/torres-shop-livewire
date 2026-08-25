@@ -179,7 +179,7 @@ class AdminCatalogTest extends TestCase
             'wholesale_price' => 199.99,
             'cost' => 150.00,
         ]);
-        $product->colors()->create(['name' => 'Verde Bosque', 'stock' => 5]);
+        $product->colors()->create(['name' => 'Verde Bosque']);
 
         $response = $this->get("/producto/{$product->slug}");
 

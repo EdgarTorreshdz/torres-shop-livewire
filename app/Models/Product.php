@@ -71,19 +71,43 @@ class Product extends Model
         return $this->hasMany(ProductColor::class)->orderBy('sort_order');
     }
 
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
     /**
-     * Aggregate stock across colors when this product has any — a product
-     * with colors defined delegates availability to them entirely, the
-     * same way a real store's "in stock" depends on whether *any*
-     * size/color variant has inventory, not a separate top-level number
-     * that could disagree with its variants. Falls back to the product's
-     * own `stock` column for a colorless product, so nothing before this
-     * feature existed has to change.
+     * The sizes this product is actually sold in — derived from its
+     * variants rather than stored in a separate product/size pivot, which
+     * would be a second place for the same fact to live (and disagree).
+     * Picking a size for a product IS creating its variant rows; see
+     * admin.products.variants.index.
+     */
+    protected function availableSizes(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->variants
+                ->map->size
+                ->filter()
+                ->unique('id')
+                ->sortBy([['sort_order', 'asc'], ['name', 'asc']])
+                ->values(),
+        );
+    }
+
+    /**
+     * Aggregate stock across variants when this product has any — a product
+     * with variants delegates availability to them entirely, the same way a
+     * real store's "in stock" depends on whether *any* color/size
+     * combination has inventory, not a separate top-level number that could
+     * disagree with them. Falls back to the product's own `stock` column
+     * for a product with no variants at all, so nothing that predates this
+     * feature has to change.
      */
     protected function totalStock(): Attribute
     {
         return Attribute::make(
-            get: fn () => $this->colors->isNotEmpty() ? $this->colors->sum('stock') : $this->stock,
+            get: fn () => $this->variants->isNotEmpty() ? $this->variants->sum('stock') : $this->stock,
         );
     }
 

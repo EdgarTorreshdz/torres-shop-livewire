@@ -41,6 +41,12 @@ new #[Layout('layouts.app')] class extends Component
             $image->delete();
         }
 
+        // Its rows in the inventory matrix go too, for the same reason as
+        // the images: product_variants has no cascade from product_colors
+        // (SQL Server allows only one cascade path into that table, which
+        // product_id already uses).
+        $color->variants()->delete();
+
         $color->delete();
 
         ActivityLog::record(
@@ -55,7 +61,7 @@ new #[Layout('layouts.app')] class extends Component
     public function with(): array
     {
         return [
-            'colors' => $this->product->colors()->with('images')->get(),
+            'colors' => $this->product->colors()->with(['images', 'variants'])->get(),
         ];
     }
 }; ?>
@@ -74,8 +80,10 @@ new #[Layout('layouts.app')] class extends Component
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <div class="mb-4 flex items-center justify-between">
                     <p class="max-w-xl text-sm text-gray-500">
-                        Cada color tiene su propia galería de fotos, precio (opcional — si se deja
-                        vacío usa el precio del producto) y stock independiente.
+                        Cada color tiene su propia galería de fotos y precio (opcional — si se deja
+                        vacío usa el precio del producto). El stock depende de la combinación
+                        color/talla y se edita en
+                        <a href="{{ route('admin.productos.variantes', $product) }}" wire:navigate class="font-medium text-indigo-600 hover:underline">Inventario</a>.
                     </p>
                     <a href="{{ route('admin.productos.colores.nuevo', $product) }}" wire:navigate class="shrink-0 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">
                         Nuevo color
@@ -112,13 +120,23 @@ new #[Layout('layouts.app')] class extends Component
                                         <span class="text-xs text-gray-400">(del producto)</span>
                                     @endif
                                 </td>
-                                <td class="py-2 pr-4 text-gray-500">{{ $color->stock }}</td>
-                                <td class="py-2 pr-4 text-gray-500">{{ $color->images->count() }}</td>
+                                <td class="py-2 pr-4 text-gray-500">{{ $color->total_stock }}</td>
+                                <td class="py-2 pr-4">
+                                    {{-- Called out explicitly: a color with no photo still renders
+                                         on the storefront (as a named chip), but it's almost always
+                                         an oversight rather than a choice, and nothing else on this
+                                         screen made it obvious. --}}
+                                    @if ($color->images->isEmpty())
+                                        <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Sin fotos</span>
+                                    @else
+                                        <span class="text-gray-500">{{ $color->images->count() }}</span>
+                                    @endif
+                                </td>
                                 <td class="py-2">
                                     <a href="{{ route('admin.productos.colores.editar', [$product, $color]) }}" wire:navigate class="text-indigo-600 hover:underline">Editar</a>
                                     <button
                                         type="button"
-                                        x-on:click="confirmAction('¿Eliminar el color \'{{ $color->name }}\'? Esto borra también sus fotos.', () => $wire.delete({{ $color->id }}))"
+                                        x-on:click="confirmAction('¿Eliminar el color \'{{ $color->name }}\'? Esto borra también sus fotos y su stock por talla.', () => $wire.delete({{ $color->id }}))"
                                         class="ml-3 text-red-600 hover:underline"
                                     >
                                         Eliminar

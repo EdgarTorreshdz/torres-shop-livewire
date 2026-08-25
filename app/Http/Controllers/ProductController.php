@@ -19,7 +19,11 @@ class ProductController extends Controller
      */
     public function show(string $slug): View
     {
-        $product = Product::with(['category', 'images', 'colors.images'])
+        // colors.variants as well as variants.*: the swatches ask each color
+        // for its total_stock (summed from its own variants), while the size
+        // picker walks the product's whole variant matrix — without both,
+        // every swatch would fire its own query.
+        $product = Product::with(['category', 'images', 'colors.images', 'colors.variants', 'variants.color', 'variants.size'])
             ->where('slug', $slug)
             ->where('is_active', true)
             ->firstOrFail();

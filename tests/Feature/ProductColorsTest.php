@@ -3,11 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductColor;
+use App\Models\ProductVariant;
 use App\Models\User;
-use App\Services\Cart;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -16,6 +15,11 @@ use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
+/**
+ * Colors as a presentation concern — name, swatch, own photo gallery and
+ * optional own price. Stock lives on the color x size matrix instead; see
+ * ProductVariantsTest for that half.
+ */
 class ProductColorsTest extends TestCase
 {
     use RefreshDatabase;
@@ -34,7 +38,7 @@ class ProductColorsTest extends TestCase
         return $user;
     }
 
-    public function test_an_admin_can_create_a_color_with_its_own_price_and_stock(): void
+    public function test_an_admin_can_create_a_color_with_its_own_price(): void
     {
         $this->actingAs($this->admin());
         $product = Product::factory()->create(['price' => 300]);
@@ -43,7 +47,6 @@ class ProductColorsTest extends TestCase
             ->set('name', 'Rojo')
             ->set('hex', '#DC2626')
             ->set('price', '350')
-            ->set('stock', '20')
             ->call('save')
             ->assertRedirect(route('admin.productos.colores', $product));
 
@@ -51,7 +54,6 @@ class ProductColorsTest extends TestCase
         $this->assertSame('#DC2626', $color->hex);
         $this->assertEquals(350, $color->price);
         $this->assertEquals(350, $color->effective_price);
-        $this->assertSame(20, $color->stock);
 
         $this->assertNotNull(ActivityLog::where('action', 'product.color_created')->first());
     }
@@ -64,7 +66,6 @@ class ProductColorsTest extends TestCase
         Volt::test('admin.products.colors.form', ['product' => $product])
             ->set('name', 'Azul')
             ->set('price', '')
-            ->set('stock', '10')
             ->call('save');
 
         $color = ProductColor::where('name', 'Azul')->firstOrFail();
@@ -72,12 +73,48 @@ class ProductColorsTest extends TestCase
         $this->assertEquals(300, $color->effective_price);
     }
 
+    public function test_a_new_color_gets_a_variant_row_so_it_has_somewhere_to_hold_stock(): void
+    {
+        $this->actingAs($this->admin());
+        $product = Product::factory()->create();
+
+        Volt::test('admin.products.colors.form', ['product' => $product])
+            ->set('name', 'Rojo')
+            ->call('save');
+
+        $color = ProductColor::where('name', 'Rojo')->firstOrFail();
+        $this->assertSame(1, $color->variants()->count());
+        $this->assertNull($color->variants()->first()->size_id);
+    }
+
+    /**
+     * Adding the first color to a product that already had sizeless
+     * inventory must not strand that stock under a "Sin color" row the
+     * matrix no longer renders — the existing rows are handed over to the
+     * new color instead.
+     */
+    public function test_the_first_color_adopts_the_products_existing_colorless_stock(): void
+    {
+        $this->actingAs($this->admin());
+        $product = Product::factory()->create();
+        ProductVariant::factory()->for($product)->create(['stock' => 25]);
+
+        Volt::test('admin.products.colors.form', ['product' => $product])
+            ->set('name', 'Rojo')
+            ->call('save');
+
+        $color = ProductColor::where('name', 'Rojo')->firstOrFail();
+
+        $this->assertSame(1, $product->fresh()->variants()->count());
+        $this->assertSame(25, $color->variants()->first()->stock);
+    }
+
     public function test_editing_a_color_that_belongs_to_a_different_product_is_forbidden(): void
     {
         $this->actingAs($this->admin());
         $productA = Product::factory()->create();
         $productB = Product::factory()->create();
-        $colorOfA = $productA->colors()->create(['name' => 'Rojo', 'stock' => 5]);
+        $colorOfA = ProductColor::factory()->for($productA)->create(['name' => 'Rojo']);
 
         $this->get(route('admin.productos.colores.editar', [$productB, $colorOfA]))->assertForbidden();
     }
@@ -87,11 +124,7 @@ class ProductColorsTest extends TestCase
         Storage::fake('public');
         $this->actingAs($this->admin());
         $product = Product::factory()->create();
-        // Via the factory, not $product->colors()->create() directly — the
-        // latter leaves sort_order null in-memory until refreshed (see
-        // ProductColorFactory's own comment for why), which would make
-        // the form component's mount() see an empty, invalid sort_order.
-        $color = ProductColor::factory()->for($product)->create(['name' => 'Rojo', 'stock' => 5]);
+        $color = ProductColor::factory()->for($product)->create(['name' => 'Rojo']);
 
         Volt::test('admin.products.colors.form', ['product' => $product, 'color' => $color])
             ->set('newImages', [UploadedFile::fake()->image('rojo.jpg', 1000, 1000)])
@@ -109,16 +142,20 @@ class ProductColorsTest extends TestCase
         $this->assertSame(0, $color->fresh()->images->count());
     }
 
-    public function test_deleting_a_color_removes_its_images_from_disk_and_the_database(): void
+    /**
+     * A color's images live in product_images and its inventory in
+     * product_variants, and neither cascades from product_colors (SQL
+     * Server allows only one cascade path into each of those tables, and
+     * products.id already uses it) — so both have to be cleaned up in
+     * application code or they'd outlive the color.
+     */
+    public function test_deleting_a_color_removes_its_images_and_variants(): void
     {
         Storage::fake('public');
         $this->actingAs($this->admin());
         $product = Product::factory()->create();
-        // Via the factory, not $product->colors()->create() directly — the
-        // latter leaves sort_order null in-memory until refreshed (see
-        // ProductColorFactory's own comment for why), which would make
-        // the form component's mount() see an empty, invalid sort_order.
-        $color = ProductColor::factory()->for($product)->create(['name' => 'Rojo', 'stock' => 5]);
+        $color = ProductColor::factory()->for($product)->create(['name' => 'Rojo']);
+        ProductVariant::factory()->for($product)->create(['product_color_id' => $color->id, 'stock' => 4]);
 
         Volt::test('admin.products.colors.form', ['product' => $product, 'color' => $color])
             ->set('newImages', [UploadedFile::fake()->image('rojo.jpg', 1000, 1000)])
@@ -130,108 +167,24 @@ class ProductColorsTest extends TestCase
 
         Storage::disk('public')->assertMissing($imagePath);
         $this->assertNull(ProductColor::find($color->id));
+        $this->assertSame(0, ProductVariant::where('product_color_id', $color->id)->count());
     }
 
-    public function test_a_product_with_colors_reports_aggregate_stock_and_a_colorless_one_keeps_its_own(): void
+    /**
+     * A color with no photo and no hex used to render as a gray circle
+     * holding the first three letters of its name ("Roj"), which read as a
+     * broken image rather than a color button. It's a full named chip now.
+     */
+    public function test_a_color_without_a_photo_still_shows_its_full_name_on_the_product_page(): void
     {
-        // products.stock (999) must be ignored once colors exist — total_stock
-        // has to come from summing the colors (3 + 4 = 7), not the column.
-        $withColors = Product::factory()->create(['stock' => 999]);
-        $withColors->colors()->createMany([
-            ['name' => 'Rojo', 'stock' => 3],
-            ['name' => 'Azul', 'stock' => 4],
-        ]);
+        $product = Product::factory()->create(['is_active' => true]);
+        $color = ProductColor::factory()->for($product)->create(['name' => 'Rojo Carmesí', 'hex' => null]);
+        ProductVariant::factory()->for($product)->create(['product_color_id' => $color->id, 'stock' => 3]);
 
-        $withoutColors = Product::factory()->create(['stock' => 7, 'is_active' => true]);
+        $response = $this->get("/producto/{$product->slug}");
 
-        $this->assertSame(7, $withColors->fresh(['colors'])->total_stock);
-        $this->assertTrue($withColors->fresh(['colors'])->is_in_stock);
-        $this->assertSame(7, $withoutColors->fresh()->total_stock);
-        $this->assertTrue($withoutColors->fresh()->is_in_stock);
-    }
-
-    public function test_a_product_whose_colors_are_all_out_of_stock_is_not_in_stock(): void
-    {
-        $product = Product::factory()->create(['stock' => 999]);
-        $product->colors()->createMany([
-            ['name' => 'Rojo', 'stock' => 0],
-            ['name' => 'Azul', 'stock' => 0],
-        ]);
-
-        $this->assertSame(0, $product->fresh(['colors'])->total_stock);
-        $this->assertFalse($product->fresh(['colors'])->is_in_stock);
-    }
-
-    public function test_adding_the_same_product_in_two_different_colors_creates_two_cart_lines(): void
-    {
-        $product = Product::factory()->create(['price' => 100, 'is_active' => true]);
-        $red = $product->colors()->create(['name' => 'Rojo', 'stock' => 5]);
-        $blue = $product->colors()->create(['name' => 'Azul', 'stock' => 5]);
-
-        Cart::add($product->id, $red->id, 1);
-        Cart::add($product->id, $blue->id, 2);
-
-        $items = Cart::items();
-        $this->assertCount(2, $items);
-        $this->assertSame(1, $items->firstWhere('key', Cart::lineKey($product->id, $red->id))->quantity);
-        $this->assertSame(2, $items->firstWhere('key', Cart::lineKey($product->id, $blue->id))->quantity);
-    }
-
-    public function test_a_colors_own_price_is_used_in_the_cart_and_at_checkout(): void
-    {
-        $product = Product::factory()->create(['price' => 100, 'is_active' => true]);
-        $premium = $product->colors()->create(['name' => 'Edición Especial', 'price' => 150, 'stock' => 5]);
-
-        Cart::add($product->id, $premium->id, 2);
-
-        $this->assertEquals(300, Cart::total()); // 150 * 2, not 100 * 2
-
-        Volt::test('storefront.checkout')
-            ->set('customer_name', 'Cliente')
-            ->set('customer_email', 'cliente@example.com')
-            ->set('shipping_address', 'Calle 123')
-            ->call('placeOrder');
-
-        $order = Order::firstOrFail();
-        $this->assertEquals(300, $order->total);
-        $item = $order->items->first();
-        $this->assertEquals(150, $item->unit_price);
-        $this->assertSame('Edición Especial', $item->color_name);
-        $this->assertSame(3, $premium->fresh()->stock); // 5 - 2
-    }
-
-    public function test_checkout_decrements_the_colors_stock_not_the_products(): void
-    {
-        $product = Product::factory()->create(['price' => 100, 'stock' => 999, 'is_active' => true]);
-        $color = $product->colors()->create(['name' => 'Rojo', 'stock' => 5]);
-
-        Cart::add($product->id, $color->id, 3);
-
-        Volt::test('storefront.checkout')
-            ->set('customer_name', 'Cliente')
-            ->set('customer_email', 'cliente@example.com')
-            ->set('shipping_address', 'Calle 123')
-            ->call('placeOrder');
-
-        $this->assertSame(2, $color->fresh()->stock); // 5 - 3
-        $this->assertSame(999, $product->fresh()->stock); // untouched
-    }
-
-    public function test_checkout_fails_cleanly_when_a_colors_stock_is_insufficient(): void
-    {
-        $product = Product::factory()->create(['price' => 100, 'is_active' => true]);
-        $color = $product->colors()->create(['name' => 'Rojo', 'stock' => 1]);
-
-        Cart::add($product->id, $color->id, 5);
-
-        Volt::test('storefront.checkout')
-            ->set('customer_name', 'Cliente')
-            ->set('customer_email', 'cliente@example.com')
-            ->set('shipping_address', 'Calle 123')
-            ->call('placeOrder')
-            ->assertHasErrors('shipping_address');
-
-        $this->assertSame(0, Order::count());
-        $this->assertSame(1, $color->fresh()->stock);
+        $response->assertOk();
+        $response->assertSee('Rojo Carmesí');
+        $response->assertDontSee('>Roj<', false);
     }
 }

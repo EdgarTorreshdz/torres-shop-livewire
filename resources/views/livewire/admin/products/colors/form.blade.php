@@ -19,7 +19,6 @@ new #[Layout('layouts.app')] class extends Component
     public string $name = '';
     public ?string $hex = '';
     public ?string $price = '';
-    public string $stock = '';
     public string $sort_order = '0';
 
     /** @var \Illuminate\Http\UploadedFile[] */
@@ -45,7 +44,6 @@ new #[Layout('layouts.app')] class extends Component
             $this->name = $color->name;
             $this->hex = $color->hex ?? '';
             $this->price = $color->price !== null ? (string) $color->price : '';
-            $this->stock = (string) $color->stock;
             $this->sort_order = (string) $color->sort_order;
         }
     }
@@ -65,7 +63,6 @@ new #[Layout('layouts.app')] class extends Component
             'name' => ['required', 'string', 'max:255'],
             'hex' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'price' => ['nullable', 'numeric', 'min:0'],
-            'stock' => ['required', 'integer', 'min:0'],
             'sort_order' => ['required', 'integer', 'min:0'],
         ], [
             'hex.regex' => 'El color debe ser un código hexadecimal válido, ej. #DC2626.',
@@ -86,6 +83,32 @@ new #[Layout('layouts.app')] class extends Component
             );
         } else {
             $this->color = $this->product->colors()->create($validated);
+
+            // Give the new color a row in the inventory matrix for every
+            // size the product already sells (or a single sizeless one) —
+            // otherwise it would exist as a swatch with nowhere to record
+            // its stock until someone re-applied the sizes by hand.
+            //
+            // For the *first* color, the product's existing colorless rows
+            // are handed over to it instead of being duplicated: their
+            // stock was already "all of this product", so adopting them
+            // keeps that number instead of stranding it under a "Sin
+            // color" row the matrix would no longer render.
+            $adopted = $this->product->colors()->count() === 1
+                ? $this->product->variants()->whereNull('product_color_id')->update(['product_color_id' => $this->color->id])
+                : 0;
+
+            if ($adopted === 0) {
+                $sizeIds = $this->product->variants()->whereNotNull('size_id')->distinct()->pluck('size_id');
+
+                foreach ($sizeIds->isNotEmpty() ? $sizeIds : collect([null]) as $sizeId) {
+                    $this->color->variants()->create([
+                        'product_id' => $this->product->id,
+                        'size_id' => $sizeId,
+                        'stock' => 0,
+                    ]);
+                }
+            }
 
             ActivityLog::record(
                 auth()->user(),
@@ -186,15 +209,15 @@ new #[Layout('layouts.app')] class extends Component
                     @error('price') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
-                    Stock
-                    <input type="number" wire:model="stock" required class="rounded @error('stock') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
-                    @error('stock') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                </label>
-                <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Orden
                     <input type="number" wire:model="sort_order" min="0" class="rounded border-gray-300" />
                     <span class="text-xs text-gray-500">Los colores se muestran de menor a mayor en la ficha del producto.</span>
                 </label>
+
+                <p class="col-span-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                    El stock ya no se captura aquí: depende de la combinación color/talla.
+                    Se edita en <a href="{{ route('admin.productos.variantes', $product) }}" wire:navigate class="font-medium text-indigo-600 hover:underline">Inventario del producto</a>.
+                </p>
 
                 @if ($color)
                     <div class="col-span-full border-t border-gray-200 pt-4">

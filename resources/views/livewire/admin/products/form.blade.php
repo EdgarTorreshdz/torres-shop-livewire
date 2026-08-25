@@ -39,7 +39,7 @@ new #[Layout('layouts.app')] class extends Component
         abort_unless(auth()->user()->can('products.manage'), 403);
 
         if ($product?->exists) {
-            $this->product = $product->load(['images', 'colors.images']);
+            $this->product = $product->load(['images', 'colors.images', 'colors.variants', 'variants']);
             $this->category_id = $product->category_id;
             $this->name = $product->name;
             $this->sku = $product->sku ?? '';
@@ -307,8 +307,11 @@ new #[Layout('layouts.app')] class extends Component
                     Stock
                     <input type="number" wire:model="stock" required class="rounded @error('stock') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('stock') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                    @if ($product?->colors->isNotEmpty())
-                        <span class="text-xs text-amber-600">Este producto ya tiene colores — el stock real se controla por color, este valor no se usa.</span>
+                    @if ($product?->variants->isNotEmpty())
+                        <span class="text-xs text-amber-600">
+                            Este producto ya tiene colores o tallas — el stock real se controla por combinación en
+                            <a href="{{ route('admin.productos.variantes', $product) }}" wire:navigate class="font-medium underline">Inventario</a>, este valor no se usa.
+                        </span>
                     @endif
                 </label>
                 @if ($this->marginPreview)
@@ -359,13 +362,18 @@ new #[Layout('layouts.app')] class extends Component
 
                     <div class="col-span-full border-t border-gray-200 pt-4">
                         <div class="flex items-center justify-between">
-                            <h3 class="text-sm font-medium uppercase tracking-wide text-gray-500">Colores</h3>
-                            <a href="{{ route('admin.productos.colores', $product) }}" wire:navigate class="text-sm text-indigo-600 hover:underline">
-                                Gestionar colores &rarr;
-                            </a>
+                            <h3 class="text-sm font-medium uppercase tracking-wide text-gray-500">Colores y tallas</h3>
+                            <div class="flex gap-4">
+                                <a href="{{ route('admin.productos.colores', $product) }}" wire:navigate class="text-sm text-indigo-600 hover:underline">
+                                    Gestionar colores &rarr;
+                                </a>
+                                <a href="{{ route('admin.productos.variantes', $product) }}" wire:navigate class="text-sm text-indigo-600 hover:underline">
+                                    Inventario por color/talla &rarr;
+                                </a>
+                            </div>
                         </div>
                         @if ($product->colors->isEmpty())
-                            <p class="mt-2 text-sm text-gray-500">Este producto todavía no tiene colores. Cada color puede tener su propia galería de fotos, precio y stock.</p>
+                            <p class="mt-2 text-sm text-gray-500">Este producto todavía no tiene colores. Cada color puede tener su propia galería de fotos y precio.</p>
                         @else
                             <div class="mt-3 flex flex-wrap gap-3">
                                 @foreach ($product->colors as $color)
@@ -379,7 +387,7 @@ new #[Layout('layouts.app')] class extends Component
                                         @endif
                                         <div>
                                             <p class="font-medium text-gray-900">{{ $color->name }}</p>
-                                            <p class="text-xs text-gray-500">${{ number_format($color->effective_price, 2) }} · {{ $color->stock }} en stock</p>
+                                            <p class="text-xs text-gray-500">${{ number_format($color->effective_price, 2) }} · {{ $color->total_stock }} en stock</p>
                                         </div>
                                     </div>
                                 @endforeach

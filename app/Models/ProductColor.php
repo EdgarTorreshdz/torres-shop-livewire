@@ -17,7 +17,6 @@ class ProductColor extends Model
         'name',
         'hex',
         'price',
-        'stock',
         'sort_order',
     ];
 
@@ -28,7 +27,6 @@ class ProductColor extends Model
             // columns as strings unless cast explicitly.
             'product_id' => 'integer',
             'price' => 'decimal:2',
-            'stock' => 'integer',
             'sort_order' => 'integer',
         ];
     }
@@ -41,6 +39,24 @@ class ProductColor extends Model
     public function images(): HasMany
     {
         return $this->hasMany(ProductImage::class)->orderBy('sort_order');
+    }
+
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
+    /**
+     * A color no longer carries stock of its own — it's the sum of its
+     * variants (one per size, or a single sizeless one). Kept as an
+     * accessor so admin screens can still show "how much Rojo is there"
+     * without every caller summing by hand.
+     */
+    protected function totalStock(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->variants->sum('stock'),
+        );
     }
 
     /**

@@ -52,9 +52,14 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Volt::route('/productos/destacados', 'admin.products.featured')->name('productos.destacados');
     Volt::route('/productos/papelera', 'admin.products.trash')->name('productos.papelera');
     Volt::route('/productos/{product}', 'admin.products.form')->name('productos.editar');
+    Volt::route('/productos/{product}/variantes', 'admin.products.variants.index')->name('productos.variantes');
     Volt::route('/productos/{product}/colores', 'admin.products.colors.index')->name('productos.colores');
     Volt::route('/productos/{product}/colores/nuevo', 'admin.products.colors.form')->name('productos.colores.nuevo');
     Volt::route('/productos/{product}/colores/{color}', 'admin.products.colors.form')->name('productos.colores.editar');
+
+    // Global size catalog — gated by 'products.manage' (see the component's
+    // docblock for why it doesn't get a permission of its own).
+    Volt::route('/tallas', 'admin.sizes.index')->name('tallas');
 
     Volt::route('/categorias', 'admin.categories.index')->name('categorias');
     Volt::route('/categorias/nueva', 'admin.categories.form')->name('categorias.nueva');

@@ -40,8 +40,8 @@ new #[Layout('components.storefront-shell', ['title' => 'Carrito', 'noindex' => 
                         <a href="{{ route('product.show', $item->product->slug) }}" wire:navigate class="font-medium text-gray-900 hover:underline">
                             {{ $item->product->name }}
                         </a>
-                        @if ($item->color)
-                            <span class="text-sm text-gray-500">— {{ $item->color->name }}</span>
+                        @if ($item->variant?->label)
+                            <span class="text-sm text-gray-500">— {{ $item->variant->label }}</span>
                         @endif
                         <p class="text-sm text-gray-500">${{ number_format($item->unit_price, 2) }} c/u</p>
                     </div>
@@ -49,7 +49,7 @@ new #[Layout('components.storefront-shell', ['title' => 'Carrito', 'noindex' => 
                     <input
                         type="number"
                         min="1"
-                        max="{{ $item->color?->stock ?? $item->product->stock }}"
+                        max="{{ $item->available_stock }}"
                         value="{{ $item->quantity }}"
                         wire:change="updateQuantity('{{ $item->key }}', $event.target.value)"
                         class="w-20 rounded border-gray-300 text-sm"

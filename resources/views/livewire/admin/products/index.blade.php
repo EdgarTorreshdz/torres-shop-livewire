@@ -46,7 +46,7 @@ new #[Layout('layouts.app')] class extends Component
     {
         return [
             'products' => Product::query()
-                ->with(['category', 'images', 'colors.images'])
+                ->with(['category', 'images', 'colors.images', 'variants'])
                 ->when($this->search, fn ($q) => $q->where('name', 'like', "%{$this->search}%"))
                 ->orderBy('name')
                 ->paginate(10),

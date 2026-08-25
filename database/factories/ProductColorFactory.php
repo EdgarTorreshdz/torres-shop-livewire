@@ -12,7 +12,6 @@ class ProductColorFactory extends Factory
         return [
             'product_id' => Product::factory(),
             'name' => fake()->safeColorName(),
-            'stock' => fake()->numberBetween(0, 50),
             // Explicit, not left to the column's DB-level default (0):
             // Eloquent doesn't reflect a DB default on the in-memory model
             // after create() until it's refreshed, so a factory instance

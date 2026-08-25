@@ -95,23 +95,42 @@
                         <p class="text-sm font-medium text-gray-700">
                             Color: <span x-text="colors.find(c => c.id === selectedColorId)?.name ?? ''"></span>
                         </p>
-                        <div class="mt-2 flex flex-wrap gap-2">
+                        {{--
+                            Three shapes of swatch, not one shape with a broken
+                            fallback: a photo swatch, a solid hex dot, or — when
+                            the color has neither yet — a named text chip. The
+                            old fallback crammed the first 3 letters into a gray
+                            circle ("Roj"), which read as a failed image rather
+                            than a deliberate color button.
+                        --}}
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
                             @foreach ($product->colors as $color)
-                                <button
-                                    type="button"
-                                    @click="selectColor({{ $color->id }})"
-                                    :class="selectedColorId === {{ $color->id }} ? 'ring-2 ring-gray-900 ring-offset-2' : 'ring-1 ring-gray-200'"
-                                    class="h-14 w-14 shrink-0 overflow-hidden rounded-full {{ $color->stock <= 0 ? 'opacity-40' : '' }}"
-                                    title="{{ $color->name }}{{ $color->stock <= 0 ? ' (agotado)' : '' }}"
-                                >
-                                    @if ($color->images->first())
-                                        <img src="{{ $color->images->first()->url }}" alt="{{ $color->name }}" class="h-full w-full object-cover" />
-                                    @elseif ($color->hex)
-                                        <span class="block h-full w-full" style="background-color: {{ $color->hex }}"></span>
-                                    @else
-                                        <span class="flex h-full w-full items-center justify-center bg-gray-100 text-[10px] font-medium uppercase text-gray-500">{{ mb_substr($color->name, 0, 3) }}</span>
-                                    @endif
-                                </button>
+                                @php($soldOut = $color->total_stock <= 0)
+                                @if ($color->images->first() || $color->hex)
+                                    <button
+                                        type="button"
+                                        @click="selectColor({{ $color->id }})"
+                                        :class="selectedColorId === {{ $color->id }} ? 'ring-2 ring-gray-900 ring-offset-2' : 'ring-1 ring-gray-200'"
+                                        class="h-14 w-14 shrink-0 overflow-hidden rounded-full {{ $soldOut ? 'opacity-40' : '' }}"
+                                        title="{{ $color->name }}{{ $soldOut ? ' (agotado)' : '' }}"
+                                    >
+                                        @if ($color->images->first())
+                                            <img src="{{ $color->images->first()->url }}" alt="{{ $color->name }}" class="h-full w-full object-cover" />
+                                        @else
+                                            <span class="block h-full w-full" style="background-color: {{ $color->hex }}"></span>
+                                        @endif
+                                    </button>
+                                @else
+                                    <button
+                                        type="button"
+                                        @click="selectColor({{ $color->id }})"
+                                        :class="selectedColorId === {{ $color->id }} ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-700 hover:border-gray-900'"
+                                        class="h-14 shrink-0 rounded-full border px-5 text-sm font-medium transition {{ $soldOut ? 'opacity-40' : '' }}"
+                                        title="{{ $color->name }}{{ $soldOut ? ' (agotado)' : '' }}"
+                                    >
+                                        {{ $color->name }}
+                                    </button>
+                                @endif
                             @endforeach
                         </div>
                     </div>

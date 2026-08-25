@@ -2,7 +2,7 @@
 
 use App\Models\Order;
 use App\Models\Product;
-use App\Models\ProductColor;
+use App\Models\ProductVariant;
 use App\Services\Cart;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
@@ -68,13 +68,19 @@ new #[Layout('components.storefront-shell', ['title' => 'Checkout', 'noindex' =>
                         ->lockForUpdate()
                         ->findOrFail($line['product_id']);
 
-                    $color = $line['color_id']
-                        ? ProductColor::where('product_id', $product->id)->lockForUpdate()->findOrFail($line['color_id'])
+                    // Lock whichever row actually owns the stock for this
+                    // line: the variant (color x size) when one was chosen,
+                    // the product itself for a product that has none.
+                    $variant = $line['variant_id']
+                        ? ProductVariant::where('product_id', $product->id)
+                            ->with(['color', 'size'])
+                            ->lockForUpdate()
+                            ->findOrFail($line['variant_id'])
                         : null;
 
-                    $availableStock = $color ? $color->stock : $product->stock;
+                    $availableStock = $variant ? $variant->stock : $product->stock;
                     $quantity = $line['quantity'];
-                    $label = $product->name.($color ? " ({$color->name})" : '');
+                    $label = $product->name.($variant?->label ? " ({$variant->label})" : '');
 
                     if ($availableStock < $quantity) {
                         throw \Illuminate\Validation\ValidationException::withMessages([
@@ -82,21 +88,22 @@ new #[Layout('components.storefront-shell', ['title' => 'Checkout', 'noindex' =>
                         ]);
                     }
 
-                    $unitPrice = $color?->effective_price ?? $product->price;
+                    $unitPrice = $variant?->effective_price ?? $product->price;
                     $subtotal = $unitPrice * $quantity;
                     $total += $subtotal;
 
                     $order->items()->create([
                         'product_id' => $product->id,
                         'product_name' => $product->name,
-                        'color_name' => $color?->name,
+                        'color_name' => $variant?->color?->name,
+                        'size_name' => $variant?->size?->name,
                         'unit_price' => $unitPrice,
                         'quantity' => $quantity,
                         'subtotal' => $subtotal,
                     ]);
 
-                    if ($color) {
-                        $color->decrement('stock', $quantity);
+                    if ($variant) {
+                        $variant->decrement('stock', $quantity);
                     } else {
                         $product->decrement('stock', $quantity);
                     }
@@ -167,7 +174,7 @@ new #[Layout('components.storefront-shell', ['title' => 'Checkout', 'noindex' =>
             <div class="mt-3 divide-y divide-gray-200 border-y border-gray-200">
                 @foreach ($items as $item)
                     <div class="flex items-center justify-between py-3 text-sm">
-                        <span>{{ $item->product->name }}{{ $item->color ? " ({$item->color->name})" : '' }} &times; {{ $item->quantity }}</span>
+                        <span>{{ $item->product->name }}{{ $item->variant?->label ? " ({$item->variant->label})" : '' }} &times; {{ $item->quantity }}</span>
                         <span class="font-medium">${{ number_format($item->subtotal, 2) }}</span>
                     </div>
                 @endforeach

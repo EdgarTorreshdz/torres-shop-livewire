@@ -12,35 +12,34 @@ use Illuminate\Support\Facades\Session;
  * can change without hunting down every place that reads/writes it
  * directly.
  *
- * Each line is keyed by "{product_id}:{color_id}" (color_id 0 = no color
- * chosen, for a colorless product) rather than just product_id — the same
- * product in two different colors has to be two separate cart lines, with
- * their own quantity and (since a color can have its own price) their own
- * unit price.
+ * Each line is keyed by "{product_id}:{variant_id}" (variant_id 0 = the
+ * product has no variants at all) rather than just product_id: the same
+ * product in two different color/size combinations has to be two separate
+ * lines, each with its own quantity, stock ceiling and unit price.
  */
 class Cart
 {
     private const SESSION_KEY = 'cart';
 
-    /** @return array<string, array{product_id: int, color_id: ?int, quantity: int}> keyed by line key */
+    /** @return array<string, array{product_id: int, variant_id: ?int, quantity: int}> keyed by line key */
     public static function raw(): array
     {
         return Session::get(self::SESSION_KEY, []);
     }
 
-    public static function lineKey(int $productId, ?int $colorId): string
+    public static function lineKey(int $productId, ?int $variantId): string
     {
-        return "{$productId}:".($colorId ?? 0);
+        return "{$productId}:".($variantId ?? 0);
     }
 
-    public static function add(int $productId, ?int $colorId, int $quantity = 1): void
+    public static function add(int $productId, ?int $variantId, int $quantity = 1): void
     {
         $items = self::raw();
-        $key = self::lineKey($productId, $colorId);
+        $key = self::lineKey($productId, $variantId);
 
         $items[$key] = [
             'product_id' => $productId,
-            'color_id' => $colorId,
+            'variant_id' => $variantId,
             'quantity' => ($items[$key]['quantity'] ?? 0) + $quantity,
         ];
 
@@ -80,12 +79,12 @@ class Cart
     }
 
     /**
-     * Hydrated cart lines with their product (and color, if any) loaded,
+     * Hydrated cart lines with their product (and variant, if any) loaded,
      * quantity/price/subtotal computed from *current* database values —
      * the same "never trust a stale number" rule the checkout transaction
-     * re-applies server-side. Silently drops lines whose product no
-     * longer exists/was deactivated, or whose chosen color was deleted,
-     * rather than erroring the whole cart out.
+     * re-applies server-side. Silently drops lines whose product no longer
+     * exists/was deactivated, or whose chosen variant was deleted, rather
+     * than erroring the whole cart out.
      */
     public static function items(): Collection
     {
@@ -98,7 +97,7 @@ class Cart
         $productIds = array_unique(array_column($raw, 'product_id'));
 
         $products = Product::query()
-            ->with('colors')
+            ->with(['variants.color', 'variants.size'])
             ->whereIn('id', $productIds)
             ->where('is_active', true)
             ->get()
@@ -112,24 +111,25 @@ class Cart
                     return null;
                 }
 
-                $color = $line['color_id'] ? $product->colors->firstWhere('id', $line['color_id']) : null;
+                $variant = $line['variant_id'] ? $product->variants->firstWhere('id', $line['variant_id']) : null;
 
-                // A color was chosen but no longer exists (deleted since
-                // the item was added) — drop the line rather than silently
-                // falling back to the base product/price, which the
+                // A variant was chosen but no longer exists (its color or
+                // size was removed since) — drop the line rather than
+                // silently falling back to the bare product, which the
                 // customer never actually selected.
-                if ($line['color_id'] && ! $color) {
+                if ($line['variant_id'] && ! $variant) {
                     return null;
                 }
 
-                $availableStock = $color ? $color->stock : $product->stock;
-                $unitPrice = $color?->effective_price ?? $product->price;
+                $availableStock = $variant ? $variant->stock : $product->stock;
+                $unitPrice = $variant?->effective_price ?? $product->price;
                 $quantity = min($line['quantity'], max($availableStock, 0));
 
                 return (object) [
-                    'key' => self::lineKey($product->id, $color?->id),
+                    'key' => self::lineKey($product->id, $variant?->id),
                     'product' => $product,
-                    'color' => $color,
+                    'variant' => $variant,
+                    'available_stock' => $availableStock,
                     'quantity' => $quantity,
                     'unit_price' => $unitPrice,
                     'subtotal' => $unitPrice * $quantity,

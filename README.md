@@ -161,17 +161,15 @@ problema real pero mucho más grande, ya separado como una tarea aparte.
 ## Colores de producto con imagen y precio propios (variantes estilo Nike)
 
 El campo `color` de texto libre (de la sección anterior) se reemplazó por una variante real:
-`product_colors` (`id`, `product_id`, `name`, `hex` opcional, `price` opcional, `stock`,
-`sort_order`), y `product_images` ganó una `product_color_id` opcional — así que un color puede
-tener su propia **galería completa de fotos** (no solo una imagen), su propio **precio** (si se
-deja vacío, usa el del producto — `ProductColor::effective_price`) y su propio **stock
-independiente**. Un producto sin colores sigue funcionando exactamente igual que antes (su propio
-`price`/`stock`), y un producto *con* colores delega su disponibilidad y precio a ellos por
-completo — decisión explícita, no una casualidad: se decidió así al construir esto en vez de la
-opción más simple (stock compartido, una sola imagen por color) porque el pedido original
-mencionaba precio propio por color, y eso solo tiene sentido de punta a punta (carrito → checkout
-→ pedido) si el color también controla su propio stock — si no, ¿qué evita vender más "rojos" de
-los que hay?
+`product_colors` (`id`, `product_id`, `name`, `hex` opcional, `price` opcional, `sort_order`), y
+`product_images` ganó una `product_color_id` opcional — así que un color puede tener su propia
+**galería completa de fotos** (no solo una imagen) y su propio **precio** (si se deja vacío, usa
+el del producto — `ProductColor::effective_price`).
+
+> **El stock ya no vive aquí.** Cuando después se agregaron las tallas, el inventario se movió a
+> la matriz color × talla (`product_variants`) — ver la sección siguiente. `ProductColor` conserva
+> un accesor `total_stock` que suma sus variantes, pero la columna `stock` que tenía se eliminó
+> para no dejar dos números que pudieran contradecirse.
 
 - **Admin** (`/admin/productos/{id}/colores`, mismo permiso `products.manage`): CRUD de colores
   con el mismo patrón de imágenes que ya usan productos (`WithFileUploads` + `ResponsiveImage`,
@@ -188,15 +186,13 @@ los que hay?
   desde Alpine, capturado por `#[On('color-selected')]` en `App\Livewire\AddToCart` — funciona sin
   importar que las dos piezas vivan en sitios distintos del DOM (la galería es Blade+Alpine plano,
   fuera del componente Livewire).
-- **Carrito**: cada línea ahora se identifica por `"{product_id}:{color_id}"`
-  (`App\Services\Cart::lineKey()`), no solo `product_id` — el mismo producto en dos colores
-  distintos son dos líneas separadas, cada una con su propio precio/stock máximo. `Cart::add()`
-  cambió de firma (`add($productId, $quantity)` → `add($productId, $colorId, $quantity)`).
-- **Checkout**: bloquea (`lockForUpdate()`) y descuenta el stock del **color** elegido cuando hay
-  uno, en vez del producto — el producto solo se bloquea para leer su precio/nombre. `OrderItem`
-  ganó `color_name` (snapshot de texto, mismo patrón que `product_name` — no una FK, así que un
-  color borrado después nunca afecta pedidos ya hechos), mostrado en las tres pantallas que ya
-  listaban pedidos (éxito del checkout, `/admin/pedidos/{id}`, `/mis-pedidos/{id}`).
+- **Un color sin foto no se ve roto.** El swatch tiene tres formas, no una con un respaldo a
+  medias: foto si el color tiene galería, punto sólido si tiene `hex`, y si no tiene ninguno de
+  los dos, un **chip con el nombre completo** ("Rojo"). El respaldo original metía las primeras 3
+  letras en un círculo gris ("Roj"), que se leía como una imagen que no cargó — de hecho fue
+  reportado como bug ("no se ve la imagen del primer color") cuando en realidad el color
+  simplemente nunca tuvo foto. Para que eso sea evidente del lado del admin, el listado de colores
+  ahora marca esas filas con una etiqueta **"Sin fotos"**.
 
 **Tres bugs reales encontrados al construir esto** (además del de SQL Server con `NULL` en índices
 únicos, ya cubierto arriba):
@@ -211,7 +207,7 @@ los que hay?
    producto, solo que ahora también las filas.
 2. **Eloquent no refleja un default de columna a nivel de base de datos en el modelo recién
    creado.** `product_colors.sort_order` tiene `->default(0)` en la migración, pero
-   `$product->colors()->create(['name' => 'Rojo', 'stock' => 5])` (sin pasar `sort_order`) deja la
+   `$product->colors()->create(['name' => 'Rojo'])` (sin pasar `sort_order`) deja la
    instancia en memoria con `sort_order === null` hasta que se refresca — el formulario de edición,
    que arranca de esa instancia, terminaba mandando `sort_order = ''` y la validación `required`
    tronaba. Encontrado escribiendo `ProductColorsTest`, no en la app real (el formulario de "Nuevo
@@ -222,6 +218,62 @@ los que hay?
    del locale de la app. Mismo problema de raíz que el de las páginas de auth (`LoginForm`, etc.):
    un helper de Laravel que resuelve texto en inglés sin que este proyecto lo note, porque nunca
    configuró nada de i18n. Reemplazado por un ternario simple.
+
+## Tallas y la matriz de inventario color × talla
+
+Las tallas se agregaron como una **segunda dimensión de variante**, y con ellas el inventario dejó
+de vivir en el color:
+
+- **`sizes`** — catálogo **global** (`name` único, `sort_order`), administrado en `/admin/tallas`.
+  Un producto no escribe sus tallas: elige cuáles de este catálogo le aplican. Evita que `"M"`,
+  `"m"` y `"Mediana"` convivan como tres tallas distintas y deja abierta la posibilidad de filtrar
+  por talla en la tienda. Gated por `products.manage` en vez de un permiso propio — es plomería de
+  catálogo para productos, no una sección que alguien vaya a tener suelta.
+- **`product_variants`** (`product_id`, `product_color_id` nullable, `size_id` nullable, `stock`) —
+  una fila por combinación realmente vendible, y **el único lugar donde vive el stock** en cuanto
+  un producto tiene variantes. Ambas dimensiones son nullable, así que un producto puede tener solo
+  colores (`size_id` null), solo tallas (`product_color_id` null), ambas, o ninguna (sin variantes,
+  usando `products.stock` como siempre).
+
+**Por qué una matriz y no dos listas independientes:** con stock por color *y* stock por talla por
+separado, "Rojo tiene 10" y "M tiene 5" no responden cuántos Rojo/M quedan, y el checkout tendría
+que decidir arbitrariamente de cuál descontar. Fue una decisión consultada explícitamente antes de
+construirla, no una suposición.
+
+- **Admin** (`/admin/productos/{id}/variantes`): una rejilla con los colores como filas y las
+  tallas como columnas, un input de stock por celda. Marcar una talla **materializa** una variante
+  por color; desmarcarla borra esas filas (con su stock — por eso el botón pide confirmación).
+  Las tallas de un producto no se guardan en un pivote `product_size`: **son** las tallas distintas
+  entre sus variantes (`Product::available_sizes`), para no tener dos lugares donde el mismo hecho
+  pueda discrepar.
+- **Agregar el primer color a un producto que ya tenía stock sin color no lo pierde**: sus filas
+  sin color se le **traspasan** a ese color en vez de duplicarse, porque ese stock ya era "todo
+  este producto". Si no, quedaría bajo una fila "Sin color" que la matriz ya no dibuja.
+- **Tienda**: los swatches de color siguen siendo Alpine (cambian la foto sin ir al servidor), pero
+  el **selector de talla vive dentro de `<livewire:add-to-cart>`** — una talla no cambia la foto, y
+  lo que sí cambia (qué variante, y por lo tanto el tope de stock) es un dato del servidor. Las
+  tallas agotadas **en el color seleccionado** se muestran tachadas y deshabilitadas en vez de
+  desaparecer, y al cambiar de color se re-elige automáticamente la primera talla con stock en ese
+  color.
+- **Carrito**: cada línea es `"{product_id}:{variant_id}"` (`Cart::lineKey()`) — el mismo producto
+  en Rojo/M y en Rojo/L son dos líneas distintas. `Cart::add()` cambió de firma otra vez
+  (`add($productId, $colorId, $quantity)` → `add($productId, $variantId, $quantity)`).
+- **Checkout**: bloquea (`lockForUpdate()`) y descuenta el stock de la **variante**, no del
+  producto ni del color. `OrderItem` ganó `size_name` junto a `color_name` (ambos snapshots de
+  texto, sin FK, para que renombrar o borrar una talla no reescriba pedidos ya hechos) y un accesor
+  `variant_label` que arma `"Rojo / M"` en las tres pantallas que listan pedidos.
+
+**Gotcha de SQL Server, otra vez el mismo:** `product_variants` no puede cascadear desde
+`product_colors` ni desde `sizes` — ya cascadea desde `products` vía `product_id`, y SQL Server
+solo admite una ruta de cascada hacia cada tabla. Borrar un color o una talla limpia sus variantes
+en código de aplicación, exactamente como ya se hacía con las imágenes de un color.
+
+**Y un detalle de índices al revés que el del SKU:** la unicidad de `(product_id,
+product_color_id, size_id)` **no** se declaró en la base. Con columnas nullable los drivers no se
+ponen de acuerdo en qué es un duplicado — SQL Server trata `NULL = NULL` (sí la aplicaría),
+mientras sqlite/mysql/pgsql tratan cada `NULL` como distinto (no la aplicaría). Como el admin
+*genera* la matriz en vez de dejar escribir combinaciones arbitrarias, la unicidad se garantiza ahí
+y en la base solo queda un índice normal para las búsquedas.
 
 ## Categorías destacadas y productos seleccionados
 
@@ -406,7 +458,7 @@ el resto del sitio en vez del `shadow-md` por defecto.
 
 ## Tests
 
-`php artisan test` — 106 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 118 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -437,16 +489,25 @@ mayoreo/costo en un producto y el margen (`margin_amount`/`margin_percent`) se c
 correctamente, dejar vacíos los campos numéricos opcionales (mayoreo/costo) no truena la
 validación (`'' !== null` en PHP — ver la sección de arriba), el SKU debe ser único entre
 productos, y la ficha pública del producto muestra material pero nunca el precio mayoreo ni el
-costo de producción, y las variantes de color: un admin puede crear un color con precio/hex/stock
-propios y el `effective_price` cae al precio del producto cuando no se define uno propio, editar
-el color de otro producto por URL responde 403, subir y borrar fotos de un color genera/limpia sus
-variantes responsivas igual que las del producto, borrar un color limpia sus archivos **y** filas
-de la base de datos (sin cascada de por medio — ver el bug de SQL Server más arriba), el stock
-agregado de un producto sale de sumar sus colores (ignorando `products.stock`) y se reporta
-"agotado" solo cuando todos están en 0, agregar el mismo producto en dos colores genera dos líneas
-de carrito independientes, el precio propio de un color se respeta tanto en el carrito como al
-pagar, el checkout descuenta el stock del color (no el del producto) y falla limpiamente si el
-color elegido no tiene suficiente inventario.
+costo de producción, las variantes de color: un admin puede crear un color con precio/hex propios y
+el `effective_price` cae al precio del producto cuando no se define uno propio, editar el color de
+otro producto por URL responde 403, subir y borrar fotos de un color genera/limpia sus variantes
+responsivas igual que las del producto, borrar un color limpia sus archivos, sus filas de imagen
+**y** sus variantes de inventario (sin cascada de por medio — ver el bug de SQL Server más
+arriba), un color nuevo nace con su fila de inventario, el primer color de un producto adopta el
+stock sin color que ya existía en vez de dejarlo huérfano, un color sin foto muestra su nombre
+completo (no las 3 primeras letras) en la ficha pública, y la matriz color × talla: un customer
+recibe 403 en `/admin/tallas`, crear una talla duplicada se rechaza en español, borrar una talla
+borra las variantes que la usaban, aplicar tallas genera una variante por cada combinación
+color × talla y desmarcar una talla elimina las suyas, guardar la rejilla actualiza el stock de
+cada celda, un producto con variantes ignora su columna `stock` y uno sin variantes la sigue
+usando, un producto cuyas variantes están todas en 0 se reporta agotado, el mismo producto en dos
+combinaciones son dos líneas de carrito con su etiqueta `"Rojo / M"`, el precio propio de un color
+aplica a todas sus tallas y llega intacto al pedido (con `color_name`/`size_name` por separado),
+el checkout descuenta el stock de la variante (no el del producto) y falla limpiamente cuando esa
+combinación se queda sin inventario, el selector de talla reporta el stock por talla **del color
+seleccionado** y re-elige talla al cambiar de color, y agregar una combinación agotada al carrito
+se rechaza.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
@@ -494,4 +555,17 @@ verificar que aparecen como dos líneas independientes con su propio precio, com
 y confirmar que descuenta el stock del **color** correcto (8→7 y 3→2) dejando el `stock` del
 producto intacto, que el listado de admin muestra el stock agregado (9, no 40) con la etiqueta
 "(2 colores)" en español, y que el pedido resultante muestra "(Blanco)"/"(Negro)" junto al nombre
-del producto tanto en la pantalla de éxito como en `/admin/pedidos` y `/mis-pedidos`.
+del producto tanto en la pantalla de éxito como en `/admin/pedidos` y `/mis-pedidos`, y la matriz
+color × talla: la migración corriendo contra una base que **ya tenía** colores con stock (10 y 5),
+verificando que ese stock aparece intacto en la matriz como combinaciones sin talla y que el
+rollback lo devuelve a la columna del color; aplicar M y L desde el catálogo global y ver la
+rejilla expandirse a 2 colores × 2 tallas; capturar stock por celda dejando Rojo/L y amarillo/M
+en cero a propósito; en la ficha pública, comprobar que el color sin foto ("Rojo") se dibuja como
+un chip con su nombre completo en vez del círculo gris con "Roj", que la talla L aparece tachada
+con `title="Agotado en este color"` y M seleccionada con "4 disponibles", y que al hacer clic en
+el swatch "amarillo" la foto, la etiqueta de color y las tallas se invierten juntas (M agotada, L
+seleccionada con "6 disponibles"); agregar ambas combinaciones al carrito y verlas como dos líneas
+"amarillo / L" y "Rojo / M"; completar el checkout y confirmar contra la base que descontó
+exactamente esas dos celdas (4→3 y 6→4) dejando `products.stock` en 40 sin tocar; y en
+`/admin/tallas`, crear una talla nueva, ver el contador "2 variantes" en las que están en uso y
+que un nombre duplicado se rechaza con el mensaje en español.
