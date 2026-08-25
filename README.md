@@ -117,6 +117,37 @@ categorías/productos existentes se destacan hoy, y en qué orden.
 - Ambas pantallas registran su cambio en la bitácora (`categories.featured_updated`/
   `products.featured_updated`) con la lista completa de nombres antes/después.
 
+## Sistema de alertas del admin
+
+Todo el lado administrativo usa un sistema propio de toasts y confirmaciones — nada de
+`confirm()` nativo del navegador ni mensajes de error sin marcar visualmente:
+
+- **Toasts** (`resources/views/components/admin-toast.blade.php` + `App\Concerns\Notifies`):
+  cualquier componente Volt admin llama `$this->notifySuccess('...')`/`$this->notifyError('...')`,
+  que hace dos cosas a la vez — flashea a la sesión y dispara un evento de navegador `toast` — para
+  cubrir ambos casos posibles: una acción que se queda en la misma página (ej. borrar una fila de
+  una lista) se entera por el evento en vivo; una acción que redirige (crear/guardar un formulario)
+  se entera leyendo la sesión en el siguiente render.
+
+  **Bug real encontrado al construir esto:** inicialmente el toast post-redirect se disparaba con
+  `x-init` de Alpine leyendo la sesión flasheada. Funcionaba en la wire:carga inicial pero dejaba de
+  funcionar en la segunda navegación en adelante — el contenedor del toast es estructuralmente
+  idéntico en cada página del admin, así que el morph de `wire:navigate` de Livewire actualiza los
+  atributos del mismo nodo del DOM en vez de reemplazarlo, y `x-init` solo se ejecuta una vez por
+  nodo. Se corrigió escuchando el evento `livewire:navigated` (que sí se dispara en cada render,
+  incluyendo la carga inicial) y leyendo el valor flasheado desde un atributo `data-*` en ese
+  momento, en vez de depender de `x-init`.
+- **Confirmaciones** (`resources/views/components/confirm-modal.blade.php` +
+  `window.confirmAction()` en `resources/js/app.js`): un modal global, con la misma paleta que el
+  resto del admin, reemplaza `wire:confirm` (que es literalmente el `confirm()` nativo sin estilo)
+  en cada botón destructivo — `x-on:click="confirmAction('¿Seguro?', () => $wire.delete(1))"`. El
+  callback de confirmación es JS puro pasado por el que dispara el modal; el componente del modal
+  no sabe qué está confirmando.
+- **Errores marcados visualmente**: cada campo con una regla de validación real (nombre, precio,
+  stock, imágenes) tiene un borde/anillo rojo condicional (`@error('campo') border-red-500
+  ring-1 ring-red-500 @enderror`) además del texto de error que ya existía — no solo un mensaje
+  perdido debajo del campo.
+
 ## Usuarios de prueba (seed)
 
 | Email | Password | Rol |
@@ -126,7 +157,7 @@ categorías/productos existentes se destacan hoy, y en qué orden.
 
 ## Tests
 
-`php artisan test` — 55 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+`php artisan test` — 60 tests. Cubre: catálogo público solo muestra productos activos, filtro por
 categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
 componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
 datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
@@ -136,10 +167,15 @@ personalizado con solo `activity.view` o `roles.manage` accede a su sección sin
 cambiar el rol de un usuario queda registrado con el rol anterior y el nuevo, subir un banner de
 categoría como archivo real (`Storage::fake`) queda en disco y el accessor arma la URL completa,
 curar categorías/productos destacados actualiza `featured_order` correctamente y el nav/home/
-ficha de producto reflejan solo lo curado.
+ficha de producto reflejan solo lo curado, crear/eliminar dispara un toast de éxito
+(`assertDispatched('toast', type: 'success')`), los intentos de acción bloqueada (quitarte tu
+propio rol de admin, borrar un rol protegido) disparan un toast de error sin cambiar nada.
 
 Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
 cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
 y stock descontado en la base), bitácora con diffs reales, creación de un rol personalizado y
 verificación de que un usuario con ese rol ve solo la sección permitida en el nav y recibe 403 real
-al intentar entrar a una sección fuera de su permiso.
+al intentar entrar a una sección fuera de su permiso, el modal de confirmación propio (no el
+`confirm()` nativo) apareciendo y bloqueando la acción hasta confirmar, el toast de éxito
+apareciendo tanto tras un borrado en la misma página como tras un guardado con redirect, y el
+borde rojo apareciendo en un campo con error de validación real.

@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
@@ -9,6 +10,8 @@ use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use Notifies;
+
     public User $user;
 
     public string $name = '';
@@ -51,6 +54,7 @@ new #[Layout('layouts.app')] class extends Component
             newValues: ['name' => $this->user->name],
         );
 
+        $this->notifySuccess('Cambios guardados correctamente.');
         $this->redirect(route('admin.usuarios'), navigate: true);
     }
 }; ?>
@@ -69,13 +73,13 @@ new #[Layout('layouts.app')] class extends Component
 
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Nombre
-                    <input type="text" wire:model="name" required class="rounded border-gray-300" />
+                    <input type="text" wire:model="name" required class="rounded @error('name') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('name') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
 
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Nueva contraseña (opcional)
-                    <input type="password" wire:model="password" class="rounded border-gray-300" />
+                    <input type="password" wire:model="password" class="rounded @error('password') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('password') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
 

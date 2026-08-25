@@ -1,7 +1,7 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
-use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -9,7 +9,7 @@ use Spatie\Permission\Models\Role;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithPagination, Notifies;
 
     // 'admin' and 'customer' are load-bearing: self-registration assigns
     // 'customer', every admin-only check ultimately traces back to
@@ -27,8 +27,14 @@ new #[Layout('layouts.app')] class extends Component
     {
         $role = Role::findOrFail($roleId);
 
+        // The delete button is hidden for protected roles (see @unless
+        // below), so this only fires from a direct method call bypassing
+        // the UI — still worth a proper toast instead of an uncaught
+        // exception if it ever happens.
         if (in_array($role->name, self::PROTECTED_ROLES, true)) {
-            throw ValidationException::withMessages(['name' => "El rol \"{$role->name}\" no se puede eliminar."]);
+            $this->notifyError("El rol \"{$role->name}\" no se puede eliminar.");
+
+            return;
         }
 
         $name = $role->name;
@@ -36,6 +42,8 @@ new #[Layout('layouts.app')] class extends Component
         $role->delete();
 
         ActivityLog::record(auth()->user(), 'role.deleted', "Eliminó el rol \"{$name}\"", oldValues: $before);
+
+        $this->notifySuccess("Se eliminó el rol \"{$name}\".");
     }
 
     public function with(): array
@@ -100,8 +108,7 @@ new #[Layout('layouts.app')] class extends Component
                                     @unless (in_array($role->name, $protectedRoles, true))
                                         <button
                                             type="button"
-                                            wire:click="delete({{ $role->id }})"
-                                            wire:confirm="¿Eliminar el rol &quot;{{ $role->name }}&quot;? Los usuarios con este rol se quedarán sin rol asignado."
+                                            x-on:click="confirmAction('¿Eliminar el rol \'{{ $role->name }}\'? Los usuarios con este rol se quedarán sin rol asignado.', () => $wire.delete({{ $role->id }}))"
                                             class="ml-3 text-red-600 hover:underline"
                                         >
                                             Eliminar

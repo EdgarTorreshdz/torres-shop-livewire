@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Product;
 use Livewire\Attributes\Layout;
@@ -8,7 +9,7 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithPagination, Notifies;
 
     public string $search = '';
 
@@ -30,6 +31,8 @@ new #[Layout('layouts.app')] class extends Component
         $product->delete();
 
         ActivityLog::record(auth()->user(), 'product.deleted', "Eliminó el producto \"{$name}\"", oldValues: $before);
+
+        $this->notifySuccess("Se eliminó el producto \"{$name}\".");
     }
 
     public function with(): array
@@ -97,8 +100,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <a href="{{ route('admin.productos.editar', $product) }}" wire:navigate class="text-indigo-600 hover:underline">Editar</a>
                                     <button
                                         type="button"
-                                        wire:click="delete({{ $product->id }})"
-                                        wire:confirm="¿Eliminar este producto?"
+                                        x-on:click="confirmAction('¿Eliminar este producto?', () => $wire.delete({{ $product->id }}))"
                                         class="ml-3 text-red-600 hover:underline"
                                     >
                                         Eliminar

@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Category;
 use Illuminate\Support\Facades\Storage;
@@ -10,7 +11,7 @@ use Livewire\WithFileUploads;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithFileUploads;
+    use WithFileUploads, Notifies;
 
     public ?Category $category = null;
 
@@ -88,6 +89,7 @@ new #[Layout('layouts.app')] class extends Component
             );
         }
 
+        $this->notifySuccess($this->category->wasRecentlyCreated ? 'Categoría creada correctamente.' : 'Cambios guardados correctamente.');
         $this->redirect(route('admin.categorias'), navigate: true);
     }
 
@@ -144,7 +146,7 @@ new #[Layout('layouts.app')] class extends Component
             <form wire:submit="save" class="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 bg-white p-6 sm:grid-cols-2">
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Nombre
-                    <input type="text" wire:model="name" required class="rounded border-gray-300" />
+                    <input type="text" wire:model="name" required class="rounded @error('name') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('name') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
@@ -160,7 +162,7 @@ new #[Layout('layouts.app')] class extends Component
                     @if ($bannerImage)
                         <img src="{{ $bannerImage->temporaryUrl() }}" alt="" class="mb-1 h-20 w-full rounded object-cover" />
                     @endif
-                    <input type="file" wire:model="bannerImage" accept="image/*" class="text-sm" />
+                    <input type="file" wire:model="bannerImage" accept="image/*" class="text-sm @error('bannerImage') rounded ring-1 ring-red-500 @enderror" />
                     <span class="text-xs text-gray-500">Recomendado: ancha (ej. 1600×500px).</span>
                     @error('bannerImage') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
@@ -172,7 +174,7 @@ new #[Layout('layouts.app')] class extends Component
                     @if ($mobileImage)
                         <img src="{{ $mobileImage->temporaryUrl() }}" alt="" class="mb-1 h-20 w-full rounded object-cover" />
                     @endif
-                    <input type="file" wire:model="mobileImage" accept="image/*" class="text-sm" />
+                    <input type="file" wire:model="mobileImage" accept="image/*" class="text-sm @error('mobileImage') rounded ring-1 ring-red-500 @enderror" />
                     <span class="text-xs text-gray-500">Recomendado: vertical/cuadrada (ej. 800×800px).</span>
                     @error('mobileImage') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>

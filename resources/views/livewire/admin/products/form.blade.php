@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Product;
@@ -11,7 +12,7 @@ use Livewire\WithFileUploads;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithFileUploads;
+    use WithFileUploads, Notifies;
 
     public ?Product $product = null;
 
@@ -57,6 +58,8 @@ new #[Layout('layouts.app')] class extends Component
             'is_active' => ['boolean'],
         ]);
 
+        $isNew = ! $this->product;
+
         if ($this->product) {
             $before = ActivityLog::snapshot($this->product);
 
@@ -91,6 +94,7 @@ new #[Layout('layouts.app')] class extends Component
             $this->uploadImages();
         }
 
+        $this->notifySuccess($isNew ? 'Producto creado correctamente.' : 'Cambios guardados correctamente.');
         $this->redirect(route('admin.productos'), navigate: true);
     }
 
@@ -141,6 +145,7 @@ new #[Layout('layouts.app')] class extends Component
         );
 
         $this->product->refresh();
+        $this->notifySuccess('Imagen eliminada.');
     }
 
     private function uniqueSlug(string $name, ?int $ignoreId = null): string
@@ -186,7 +191,7 @@ new #[Layout('layouts.app')] class extends Component
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Nombre
-                    <input type="text" wire:model="name" required class="rounded border-gray-300" />
+                    <input type="text" wire:model="name" required class="rounded @error('name') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('name') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
                 <label class="col-span-full flex flex-col gap-1 text-sm text-gray-700">
@@ -195,12 +200,12 @@ new #[Layout('layouts.app')] class extends Component
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Precio
-                    <input type="number" step="0.01" wire:model="price" required class="rounded border-gray-300" />
+                    <input type="number" step="0.01" wire:model="price" required class="rounded @error('price') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('price') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
                 <label class="flex flex-col gap-1 text-sm text-gray-700">
                     Stock
-                    <input type="number" wire:model="stock" required class="rounded border-gray-300" />
+                    <input type="number" wire:model="stock" required class="rounded @error('stock') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror" />
                     @error('stock') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>
                 <label class="flex items-center gap-2 text-sm text-gray-700">
@@ -229,8 +234,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <img src="{{ $image->url }}" alt="" class="h-20 w-20 rounded object-cover" />
                                     <button
                                         type="button"
-                                        wire:click="deleteImage({{ $image->id }})"
-                                        wire:confirm="¿Eliminar esta imagen?"
+                                        x-on:click="confirmAction('¿Eliminar esta imagen?', () => $wire.deleteImage({{ $image->id }}))"
                                         class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs text-white"
                                     >
                                         &times;
@@ -242,7 +246,7 @@ new #[Layout('layouts.app')] class extends Component
 
                     <label class="col-span-full flex flex-col gap-1 text-sm text-gray-700">
                         Agregar imágenes
-                        <input type="file" wire:model="newImages" multiple accept="image/*" class="rounded border-gray-300 text-sm" />
+                        <input type="file" wire:model="newImages" multiple accept="image/*" class="rounded text-sm @error('newImages.*') ring-1 ring-red-500 @else border-gray-300 @enderror" />
                         @error('newImages.*') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                     </label>
                 @else

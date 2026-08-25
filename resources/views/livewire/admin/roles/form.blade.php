@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
@@ -9,6 +10,8 @@ use Spatie\Permission\Models\Role;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use Notifies;
+
     private const PROTECTED_ROLES = ['admin', 'customer'];
 
     public ?Role $role = null;
@@ -46,6 +49,8 @@ new #[Layout('layouts.app')] class extends Component
                 ? 'unique:roles,name,'.$this->role->id
                 : 'unique:roles,name'],
         ]);
+
+        $isNew = ! $this->role;
 
         if ($this->role) {
             if ($this->isProtected() && $validated['name'] !== $this->role->name) {
@@ -86,6 +91,7 @@ new #[Layout('layouts.app')] class extends Component
             );
         }
 
+        $this->notifySuccess($isNew ? 'Rol creado correctamente.' : 'Cambios guardados correctamente.');
         $this->redirect(route('admin.roles'), navigate: true);
     }
 
@@ -114,7 +120,7 @@ new #[Layout('layouts.app')] class extends Component
                         wire:model="name"
                         required
                         @if ($this->isProtected()) disabled title="Este nombre no se puede cambiar" @endif
-                        class="rounded border-gray-300 disabled:bg-gray-100 disabled:text-gray-500"
+                        class="rounded disabled:bg-gray-100 disabled:text-gray-500 @error('name') border-red-500 ring-1 ring-red-500 @else border-gray-300 @enderror"
                     />
                     @error('name') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </label>

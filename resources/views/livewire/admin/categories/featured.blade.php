@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Category;
 use Livewire\Attributes\Layout;
@@ -7,6 +8,8 @@ use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
 {
+    use Notifies;
+
     /** @var array<int, string> category_id => order (string so an empty input is easy to detect) */
     public array $orders = [];
 
@@ -50,6 +53,7 @@ new #[Layout('layouts.app')] class extends Component
             newValues: ['featured' => array_values($after)],
         );
 
+        $this->notifySuccess('Categorías destacadas actualizadas.');
         $this->redirect(route('admin.categorias'), navigate: true);
     }
 

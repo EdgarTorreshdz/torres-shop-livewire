@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Alpine hides [x-cloak] elements only once it's booted; without this rule
+   they'd flash visible on first paint before Alpine has a chance to apply
+   x-show/x-if. */
+[x-cloak] {
+    display: none !important;
+}

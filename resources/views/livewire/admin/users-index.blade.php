@@ -1,8 +1,8 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\User;
-use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -10,7 +10,7 @@ use Spatie\Permission\Models\Role;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithPagination, Notifies;
 
     public string $search = '';
 
@@ -28,8 +28,13 @@ new #[Layout('layouts.app')] class extends Component
     {
         $user = User::findOrFail($userId);
 
+        // The role <select> is disabled for your own row (see below), so
+        // this only fires from a direct method call bypassing the UI —
+        // still worth a proper toast instead of an uncaught exception.
         if ($user->id === auth()->id() && $role !== 'admin') {
-            throw ValidationException::withMessages(['role' => 'No puedes quitarte el rol de administrador a ti mismo.']);
+            $this->notifyError('No puedes quitarte el rol de administrador a ti mismo.');
+
+            return;
         }
 
         $previousRole = $user->roles->first()?->name ?? 'sin rol';
@@ -43,6 +48,8 @@ new #[Layout('layouts.app')] class extends Component
             oldValues: ['role' => $previousRole],
             newValues: ['role' => $role],
         );
+
+        $this->notifySuccess("Se actualizó el rol de {$user->name} a \"{$role}\".");
     }
 
     public function with(): array

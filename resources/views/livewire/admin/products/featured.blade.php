@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Product;
 use Livewire\Attributes\Layout;
@@ -8,7 +9,7 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithPagination, Notifies;
 
     public string $search = '';
 
@@ -62,6 +63,7 @@ new #[Layout('layouts.app')] class extends Component
             newValues: ['featured' => array_values($after)],
         );
 
+        $this->notifySuccess('Productos seleccionados actualizados.');
         $this->redirect(route('admin.productos.destacados'), navigate: true);
     }
 

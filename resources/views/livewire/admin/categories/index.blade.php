@@ -1,5 +1,6 @@
 <?php
 
+use App\Concerns\Notifies;
 use App\Models\ActivityLog;
 use App\Models\Category;
 use Livewire\Attributes\Layout;
@@ -8,7 +9,7 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] class extends Component
 {
-    use WithPagination;
+    use WithPagination, Notifies;
 
     public string $search = '';
 
@@ -30,6 +31,8 @@ new #[Layout('layouts.app')] class extends Component
         $category->delete();
 
         ActivityLog::record(auth()->user(), 'category.deleted', "Eliminó la categoría \"{$name}\"", oldValues: $before);
+
+        $this->notifySuccess("Se eliminó la categoría \"{$name}\".");
     }
 
     public function with(): array
@@ -90,8 +93,7 @@ new #[Layout('layouts.app')] class extends Component
                                     <a href="{{ route('admin.categorias.editar', $category) }}" wire:navigate class="text-indigo-600 hover:underline">Editar</a>
                                     <button
                                         type="button"
-                                        wire:click="delete({{ $category->id }})"
-                                        wire:confirm="¿Eliminar esta categoría? Los productos que la usan quedarán sin categoría."
+                                        x-on:click="confirmAction('¿Eliminar esta categoría? Los productos que la usan quedarán sin categoría.', () => $wire.delete({{ $category->id }}))"
                                         class="ml-3 text-red-600 hover:underline"
                                     >
                                         Eliminar
