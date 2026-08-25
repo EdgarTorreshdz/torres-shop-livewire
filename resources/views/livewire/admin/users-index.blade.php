@@ -1,29 +1,48 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
+use Spatie\Permission\Models\Role;
 
-// Minimal reference implementation of the admin-panel pattern this
-// template exists to demonstrate: a role-gated page (see the `role:admin`
-// middleware on the route in routes/web.php — the real boundary, this
-// component only decides what's rendered) with search + pagination
-// handled entirely by Livewire itself. No separate JSON API, no
-// hand-rolled DataTable JS class, no CORS/token plumbing — just a
-// component, a Blade view, and the same session auth as the rest of the
-// app. Concrete projects generated from this template replace this one
-// example with real admin sections (products, orders, whatever the
-// project needs), following the same shape.
 new #[Layout('layouts.app')] class extends Component
 {
     use WithPagination;
 
     public string $search = '';
 
+    public function mount(): void
+    {
+        abort_unless(auth()->user()->can('users.manage'), 403);
+    }
+
     public function updatingSearch(): void
     {
         $this->resetPage();
+    }
+
+    public function updateRole(int $userId, string $role): void
+    {
+        $user = User::findOrFail($userId);
+
+        if ($user->id === auth()->id() && $role !== 'admin') {
+            throw ValidationException::withMessages(['role' => 'No puedes quitarte el rol de administrador a ti mismo.']);
+        }
+
+        $previousRole = $user->roles->first()?->name ?? 'sin rol';
+        $user->syncRoles([$role]);
+
+        ActivityLog::record(
+            auth()->user(),
+            'user.role_updated',
+            "Cambió el rol de {$user->name} ({$user->email}) de \"{$previousRole}\" a \"{$role}\"",
+            $user,
+            oldValues: ['role' => $previousRole],
+            newValues: ['role' => $role],
+        );
     }
 
     public function with(): array
@@ -35,6 +54,7 @@ new #[Layout('layouts.app')] class extends Component
                 ->with('roles:id,name')
                 ->orderBy('name')
                 ->paginate(10),
+            'roles' => Role::orderBy('name')->pluck('name'),
         ];
     }
 }; ?>
@@ -59,19 +79,38 @@ new #[Layout('layouts.app')] class extends Component
                         <tr class="border-b text-gray-500">
                             <th class="py-2 pr-4">{{ __('Nombre') }}</th>
                             <th class="py-2 pr-4">{{ __('Email') }}</th>
-                            <th class="py-2">{{ __('Roles') }}</th>
+                            <th class="py-2 pr-4">{{ __('Rol') }}</th>
+                            <th class="py-2">{{ __('Acciones') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($users as $user)
                             <tr class="border-b" wire:key="user-{{ $user->id }}">
-                                <td class="py-2 pr-4">{{ $user->name }}</td>
+                                <td class="py-2 pr-4">
+                                    {{ $user->name }}
+                                    @if ($user->id === auth()->id())
+                                        <span class="text-xs text-gray-400">(tú)</span>
+                                    @endif
+                                </td>
                                 <td class="py-2 pr-4">{{ $user->email }}</td>
-                                <td class="py-2">{{ $user->roles->pluck('name')->join(', ') ?: '—' }}</td>
+                                <td class="py-2 pr-4">
+                                    <select
+                                        wire:change="updateRole({{ $user->id }}, $event.target.value)"
+                                        @if ($user->id === auth()->id()) disabled title="No puedes cambiar tu propio rol" @endif
+                                        class="rounded border-gray-300 text-sm disabled:bg-gray-100"
+                                    >
+                                        @foreach ($roles as $roleName)
+                                            <option value="{{ $roleName }}" @selected($user->roles->first()?->name === $roleName)>{{ $roleName }}</option>
+                                        @endforeach
+                                    </select>
+                                </td>
+                                <td class="py-2">
+                                    <a href="{{ route('admin.usuarios.editar', $user) }}" wire:navigate class="text-indigo-600 hover:underline">Editar nombre/contraseña</a>
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="py-6 text-center text-gray-500">{{ __('No hay usuarios.') }}</td>
+                                <td colspan="4" class="py-6 text-center text-gray-500">{{ __('No hay usuarios.') }}</td>
                             </tr>
                         @endforelse
                     </tbody>

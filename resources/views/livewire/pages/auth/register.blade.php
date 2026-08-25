@@ -30,6 +30,11 @@ new #[Layout('layouts.guest')] class extends Component
 
         event(new Registered($user = User::create($validated)));
 
+        // Every self-registered account is a regular customer. The 'admin'
+        // role is only ever granted by an existing admin, from the users
+        // admin section — never through open registration.
+        $user->assignRole('customer');
+
         Auth::login($user);
 
         $this->redirect(route('dashboard', absolute: false), navigate: true);

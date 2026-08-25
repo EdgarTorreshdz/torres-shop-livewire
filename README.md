@@ -1,38 +1,17 @@
-# template-laravel-monolith
+# torres-shop-livewire
 
-[![CI](https://github.com/EdgarTorreshdz/template-laravel-monolith/actions/workflows/ci.yml/badge.svg)](https://github.com/EdgarTorreshdz/template-laravel-monolith/actions/workflows/ci.yml)
+[![CI](https://github.com/EdgarTorreshdz/torres-shop-livewire/actions/workflows/ci.yml/badge.svg)](https://github.com/EdgarTorreshdz/torres-shop-livewire/actions/workflows/ci.yml)
 
-Template base para proyectos que **no** necesitan un frontend separado: Laravel + Blade +
-[Livewire](https://livewire.laravel.com)/[Volt](https://livewire.laravel.com/docs/volt) + Alpine,
-todo en un solo repo, un solo deploy, sesiones de Laravel de toda la vida (sin API JSON, sin
-Sanctum, sin CORS). Ver [`astro-template`](../astro-template) +
-[`template-laravel-api`](../template-laravel-api) si el proyecto sí necesita frontend y backend
-separados (varios consumidores, equipos distintos, etc.) — la mayoría de proyectos de un solo
-sitio con panel admin no lo necesitan, y este template existe para esos casos.
+Demo de ecommerce ("Torres Shop") — mismo negocio que
+[`torres-shop`](https://github.com/EdgarTorreshdz/torres-shop) +
+[`torres-shop-api`](https://github.com/EdgarTorreshdz/torres-shop-api) (Astro + Laravel API
+separados), pero construido como **un solo monolito Laravel** (Blade + Livewire/Volt, sesiones,
+sin API JSON) a partir de
+[`template-laravel-monolith`](https://github.com/EdgarTorreshdz/template-laravel-monolith).
+Pieza de portafolio: mismo problema, dos arquitecturas — ver el README de `template-laravel-monolith`
+para la comparación completa de por qué existe esta segunda versión.
 
-## Por qué un monolito en vez de API + frontend separados
-
-Construimos primero el otro patrón (`astro-template` + `template-laravel-api`, ver
-[`torres-shop`](https://github.com/EdgarTorreshdz/torres-shop) como ejemplo) y varios de los bugs
-reales que encontramos ahí son **síntomas directos de la separación**, no de la lógica de negocio:
-mismatch de puerto entre los dos servidores de dev, CORS, un guard de Sanctum (`sanctum`) que no
-coincidía con el guard bajo el que se sembraron los permisos (`web`), validación duplicada
-(reglas en el controller Y en el JS del formulario), SEO que requiere `prerender = false`
-página por página en vez de venir gratis por defecto. Todo eso desaparece con un monolito:
-
-- Sesiones de Laravel (`auth`/`guest` middleware) en vez de tokens Bearer + `localStorage`.
-- Un solo guard (`web`) — no hay un segundo guard con el que un rol/permiso pueda desalinearse.
-- HTML renderizado en el servidor por defecto — SEO no requiere ningún truco especial.
-- Un solo repo, un solo `.env`, un solo deploy.
-
-## Requisitos
-
-- PHP 8.3+, Composer, Node 20+
-- **SQL Server** + los drivers de Microsoft para PHP (`sqlsrv` y `pdo_sqlsrv`) — ver la sección
-  de instalación en el README de [`template-laravel-api`](../template-laravel-api) para el
-  detalle completo, es el mismo requisito.
-
-## Setup por proyecto nuevo
+## Setup
 
 ```bash
 composer install
@@ -42,63 +21,94 @@ npm install
 npm run build
 ```
 
-Editar en `.env` las credenciales reales de SQL Server (`DB_HOST`, `DB_DATABASE`,
-`DB_USERNAME`, `DB_PASSWORD`) — o dejar `DB_USERNAME`/`DB_PASSWORD` **completamente ausentes**
-para autenticación de Windows contra una instancia local (ver "Conexión local con Windows Auth"
-abajo).
+Editar `.env` con las credenciales reales de SQL Server, o dejar `DB_USERNAME`/`DB_PASSWORD`
+**completamente ausentes** para Windows Authentication contra una instancia local — ver el README
+de `template-laravel-monolith` para el detalle completo, es el mismo setup.
 
 ```bash
 php artisan migrate --seed
+php artisan storage:link
 php artisan serve
-npm run dev   # en otra terminal, para hot-reload de Blade/CSS/JS mientras desarrollas
 ```
 
-### Conexión local con Windows Auth (sin login SQL)
+`php artisan migrate:fresh --seed` regresa la base a este mismo estado limpio en cualquier momento.
 
-```env
-DB_CONNECTION=sqlsrv
-DB_HOST=(local)\SQLEXPRESS
-DB_PORT=
-DB_DATABASE=laravel
-DB_ENCRYPT=yes
-DB_TRUST_SERVER_CERTIFICATE=true
-```
+## Arquitectura
 
-- `DB_HOST` usa el nombre de instancia, no una IP con puerto; `DB_PORT` debe quedar **vacío**.
-- `DB_USERNAME`/`DB_PASSWORD` deben quedar **completamente ausentes** del `.env` (ni siquiera
-  `DB_USERNAME=` vacío) — así es como `pdo_sqlsrv` decide usar Windows Integrated Authentication
-  en vez de intentar un login SQL. `config/database.php` ya está preparado para esto (sin
-  fallback a `root`/`''`).
-- La base debe existir de antemano: `sqlcmd -S "(local)\SQLEXPRESS" -E -Q "CREATE DATABASE laravel"`.
+Todo en un solo request/response ciclo de Laravel — nada de Sanctum, tokens, CORS, ni dos
+servidores de dev con puertos que sincronizar:
 
-## Qué trae de fábrica
+- **Catálogo y checkout** (`/`, `/tienda`, `/producto/{slug}`, `/categoria/{slug}`, `/carrito`,
+  `/checkout`) — Blade + Livewire/Volt.
+- **`/producto/{slug}` y `/categoria/{slug}` son controllers + vistas Blade planas, no
+  Livewire/Volt.** Necesitan un `<title>`/`<meta description>` real por producto/categoría en la
+  primera respuesta del servidor (SEO), y el atributo `#[Layout(...)]` de Livewire solo acepta
+  parámetros que sean constantes en tiempo de compilación — no puede recibir
+  `$this->product->meta_title`. La única parte interactiva de esas páginas (cantidad + agregar al
+  carrito) es un componente Livewire embebido (`App\Livewire\AddToCart`), no la página completa.
+- **Carrito en sesión**, no en base de datos (`App\Services\Cart`, `session('cart')` =
+  `[product_id => quantity]`) — no requiere cuenta, se resuelve del todo con el mismo mecanismo de
+  sesión que ya trae Laravel.
+- **Checkout**: mismo principio que la versión API (`torres-shop-api`) — precio/stock siempre se
+  recalculan desde la base de datos, nunca se confía en lo que traiga el carrito de sesión, y
+  `lockForUpdate()` dentro de una transacción evita sobrevender el último inventario si dos
+  personas compran al mismo tiempo.
+- **Admin** (`/admin/*`): cada sección (productos, categorías, usuarios, pedidos, bitácora, roles)
+  es un componente Volt de página completa, protegido en su propio `mount()` vía
+  `abort_unless(auth()->user()->can('permiso.especifico'), 403)`. `admin` pasa todas las
+  verificaciones automáticamente vía un `Gate::before` en `AppServiceProvider` — no hay que repetir
+  `hasRole('admin') || can(...)` en cada sección.
+- Búsqueda + paginación en las listas de admin usan `Livewire\WithPagination` nativo — no existe el
+  componente `DataTable` en JS que se escribió a mano para la versión Astro.
+- Confirmaciones destructivas (`wire:confirm`) son nativas de Livewire 3 — no hay un `confirm()`
+  de JS ni un modal casero.
 
-- **Auth completa** vía [Laravel Breeze (stack Livewire)](https://laravel.com/docs/starter-kits#breeze-and-livewire):
-  registro, login, "olvidé mi contraseña", verificación de email, perfil (nombre/email/password,
-  eliminar cuenta) — todo Blade + Volt, sin una sola línea de JS de más.
-- **Roles y permisos** vía [spatie/laravel-permission](https://spatie.be/docs/laravel-permission):
-  `App\Models\User` ya trae el trait `HasRoles`, los middleware `role`/`permission`/
-  `role_or_permission` ya están registrados en `bootstrap/app.php` (no vienen de fábrica en
-  Laravel 11+, hay que darlos de alta a mano tras instalar el paquete — ya está hecho aquí).
-- **Un solo guard.** A diferencia de la API+Sanctum (`web` para seeders/consola vs. `sanctum`
-  dentro de una request autenticada), aquí solo existe `web` — no hay una segunda superficie con
-  la que un rol/permiso pueda desalinearse por accidente.
-- **`DatabaseSeeder` sin `WithoutModelEvents`** a propósito: ese trait (que Laravel incluye por
-  defecto en el stub) rompe el cache de permisos de Spatie, que se invalida escuchando el evento
-  `saved` de `Role`/`Permission`. Con el trait activo, los roles se crean en la base pero el
-  cache nunca se entera — el porqué está documentado directamente en el archivo.
-- **Un panel admin de referencia** (`/admin/usuarios`, protegido con middleware `role:admin`,
-  componente Volt en
-  [`resources/views/livewire/admin/users-index.blade.php`](resources/views/livewire/admin/users-index.blade.php)):
-  búsqueda + paginación usando `Livewire\WithPagination` — nativo, sin escribir una clase de
-  tabla en JS ni una API JSON aparte. Proyectos concretos reemplazan/extienden este único ejemplo
-  con sus propias secciones (productos, pedidos, lo que el proyecto necesite), siguiendo el mismo
-  patrón: middleware `role:`/`permission:` en la ruta, componente Volt, listo.
+## Roles, permisos y bitácora
+
+Igual que `torres-shop-api`, pero con `spatie/laravel-permission` sobre un único guard `web`
+(no hay guard `sanctum` con el que desalinearse):
+
+- Roles: `admin`, `customer`, más los que se creen desde `/admin/roles`. `admin`/`customer`
+  protegidos contra renombrar/eliminar; `admin` siempre conserva todos los permisos.
+- Permisos: `products.manage`, `categories.manage`, `orders.manage`, `users.manage`,
+  `activity.view`, `roles.manage`.
+- `activity_logs` (`App\Models\ActivityLog`) registra cada acción de escritura del admin con
+  `old_values`/`new_values` (snapshot completo antes/después, vía `ActivityLog::snapshot($model)`)
+  — la contraseña de un usuario nunca aparece ahí, ni hasheada. `/admin/bitacora` muestra el diff
+  campo por campo con un `<details>` nativo, mostrando solo los campos que de verdad cambiaron en
+  una actualización.
+- `/admin/bitacora` y `/admin/roles` son accesibles para `admin` **o** para cualquier rol que
+  tenga el permiso puntual (`activity.view`/`roles.manage`) — no solo para admin. El nav de la
+  cuenta (`resources/views/livewire/layout/navigation.blade.php`) filtra los links según ese mismo
+  criterio, así un usuario con un permiso suelto no ve enlaces a secciones a las que de todos
+  modos rebotaría con 403.
+
+## Imágenes de producto
+
+Igual que `torres-shop-api`: un producto tiene muchas imágenes (`product_images`), subidas vía
+`Livewire\WithFileUploads` y guardadas en el disco `public` (local hoy, config-only para migrar a
+S3/R2/Spaces más adelante).
+
+## Usuarios de prueba (seed)
+
+| Email | Password | Rol |
+| --- | --- | --- |
+| `admin@torresshop.com` | `admin12345` | admin |
+| `cliente@example.com` | `cliente12345` | customer |
 
 ## Tests
 
-`php artisan test` — corre contra sqlite en memoria (ver `phpunit.xml`), no necesita el driver
-`sqlsrv` ni una instancia real de SQL Server. Incluye `AdminAccessTest` como referencia de cómo
-probar una sección protegida por rol: un invitado es redirigido a `/login`, un usuario sin el rol
-`admin` recibe 403, un admin ve la lista y la búsqueda filtra correctamente (probado directo
-sobre el componente Volt con `Livewire\Volt\Volt::test()`, sin necesidad de un navegador real).
+`php artisan test` — 48 tests. Cubre: catálogo público solo muestra productos activos, filtro por
+categoría, meta tags reales por producto (`/producto/{slug}` en una petición HTTP real, no solo el
+componente), agregar al carrito actualiza la sesión, checkout calcula el total desde la base de
+datos y descuenta stock, checkout falla limpiamente sin inventario suficiente, un customer recibe
+403 en `/admin/productos`, CRUD de productos/categorías registra `old_values`/`new_values`
+correctos en la bitácora, CRUD de roles respeta la protección de `admin`/`customer`, un rol
+personalizado con solo `activity.view` o `roles.manage` accede a su sección sin ser admin,
+cambiar el rol de un usuario queda registrado con el rol anterior y el nuevo.
+
+Verificado también end-to-end contra SQL Server real: catálogo, meta tags reales en la respuesta
+cruda (`curl`, no solo el DOM), agregar al carrito, checkout completo (con confirmación de pedido
+y stock descontado en la base), bitácora con diffs reales, creación de un rol personalizado y
+verificación de que un usuario con ese rol ve solo la sección permitida en el nav y recibe 403 real
+al intentar entrar a una sección fuera de su permiso.

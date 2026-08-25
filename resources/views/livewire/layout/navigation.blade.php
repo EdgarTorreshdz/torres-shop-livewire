@@ -14,16 +14,37 @@ new class extends Component
 
         $this->redirect('/', navigate: true);
     }
+
+    /**
+     * Every admin nav item, gated by the same permission its route checks
+     * server-side (see each Volt component's mount()) — `null` means
+     * "admin role only", a string means "admin OR that permission". This
+     * is presentation only; a link missing here never grants access, it
+     * just avoids showing a link the user would immediately get a 403 from.
+     */
+    public function adminNavItems(): array
+    {
+        $user = auth()->user();
+
+        return collect([
+            ['route' => 'admin.productos', 'label' => 'Productos', 'permission' => 'products.manage'],
+            ['route' => 'admin.categorias', 'label' => 'Categorías', 'permission' => 'categories.manage'],
+            ['route' => 'admin.usuarios', 'label' => 'Usuarios', 'permission' => 'users.manage'],
+            ['route' => 'admin.pedidos', 'label' => 'Pedidos', 'permission' => 'orders.manage'],
+            ['route' => 'admin.bitacora', 'label' => 'Bitácora', 'permission' => 'activity.view'],
+            ['route' => 'admin.roles', 'label' => 'Roles', 'permission' => 'roles.manage'],
+        ])->filter(fn ($item) => $user->can($item['permission']))->all();
+    }
 }; ?>
 
-<nav x-data="{ open: false }" class="bg-white border-b border-gray-100">
+<nav x-data="{ open: false, adminOpen: false }" class="bg-white border-b border-gray-100">
     <!-- Primary Navigation Menu -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
             <div class="flex">
                 <!-- Logo -->
                 <div class="shrink-0 flex items-center">
-                    <a href="{{ route('dashboard') }}" wire:navigate>
+                    <a href="{{ route('home') }}" wire:navigate>
                         <x-application-logo class="block h-9 w-auto fill-current text-gray-800" />
                     </a>
                 </div>
@@ -33,11 +54,11 @@ new class extends Component
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                         {{ __('Dashboard') }}
                     </x-nav-link>
-                    @role('admin')
-                        <x-nav-link :href="route('admin.users')" :active="request()->routeIs('admin.*')" wire:navigate>
-                            {{ __('Admin') }}
+                    @foreach ($this->adminNavItems() as $item)
+                        <x-nav-link :href="route($item['route'])" :active="request()->routeIs($item['route'].'*')" wire:navigate>
+                            {{ $item['label'] }}
                         </x-nav-link>
-                    @endrole
+                    @endforeach
                 </div>
             </div>
 
@@ -57,6 +78,9 @@ new class extends Component
                     </x-slot>
 
                     <x-slot name="content">
+                        <x-dropdown-link :href="route('home')" wire:navigate>
+                            {{ __('Ver tienda') }}
+                        </x-dropdown-link>
                         <x-dropdown-link :href="route('profile')" wire:navigate>
                             {{ __('Profile') }}
                         </x-dropdown-link>
@@ -89,11 +113,11 @@ new class extends Component
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
-            @role('admin')
-                <x-responsive-nav-link :href="route('admin.users')" :active="request()->routeIs('admin.*')" wire:navigate>
-                    {{ __('Admin') }}
+            @foreach ($this->adminNavItems() as $item)
+                <x-responsive-nav-link :href="route($item['route'])" :active="request()->routeIs($item['route'].'*')" wire:navigate>
+                    {{ $item['label'] }}
                 </x-responsive-nav-link>
-            @endrole
+            @endforeach
         </div>
 
         <!-- Responsive Settings Options -->
@@ -104,6 +128,9 @@ new class extends Component
             </div>
 
             <div class="mt-3 space-y-1">
+                <x-responsive-nav-link :href="route('home')" wire:navigate>
+                    {{ __('Ver tienda') }}
+                </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('profile')" wire:navigate>
                     {{ __('Profile') }}
                 </x-responsive-nav-link>
